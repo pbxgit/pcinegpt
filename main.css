@@ -183,8 +183,8 @@ BUTTONS & MICRO-INTERACTIONS
 
 /*
 ================================================================
-MAIN CONTENT & FOOTER
-- Defines the main layout container and the simple footer.
+MAIN CONTENT & LAYOUT
+- Defines the main layout container and hero section.
 ================================================================
 */
 .app-main {
@@ -198,6 +198,98 @@ MAIN CONTENT & FOOTER
     padding-bottom: calc(var(--spacing-unit) * 10); /* Footer space */
 }
 
+.hero-section {
+    text-align: center;
+    padding: calc(var(--spacing-unit) * 8) 0;
+    margin-bottom: calc(var(--spacing-unit) * 4);
+}
+
+.hero-section h1 {
+    font-size: var(--font-size-xxl);
+    font-weight: 700;
+}
+
+.tagline {
+    font-size: var(--font-size-lg);
+    color: var(--color-subtle-text);
+    margin-top: var(--spacing-unit);
+}
+
+/*
+================================================================
+CAROUSEL & POSTERS
+- Styles for the horizontal scrolling content carousels.
+- Defines the look of the movie poster cards.
+================================================================
+*/
+.carousel {
+    margin-bottom: calc(var(--spacing-unit) * 6);
+}
+
+.carousel h2 {
+    font-size: var(--font-size-xl);
+    margin-bottom: calc(var(--spacing-unit) * 2);
+    font-weight: 700;
+}
+
+.carousel-content {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: calc(var(--spacing-unit) * 2.5);
+    padding: calc(var(--spacing-unit) * 1) 0 calc(var(--spacing-unit) * 3);
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-primary) transparent;
+}
+
+.carousel-content::-webkit-scrollbar { height: 8px; }
+.carousel-content::-webkit-scrollbar-track { background: transparent; }
+.carousel-content::-webkit-scrollbar-thumb { background-color: var(--color-surface); border-radius: 10px; }
+.carousel-content:hover::-webkit-scrollbar-thumb { background-color: var(--color-primary); }
+
+.poster-card {
+    flex: 0 0 auto;
+    width: 185px;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    transition: transform var(--transition-speed-fast) var(--timing-function),
+                box-shadow var(--transition-speed-fast) var(--timing-function);
+    cursor: pointer;
+    background-color: var(--color-surface);
+}
+
+.poster-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.poster-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/*
+================================================================
+PERFORMANCE: LAZY LOADING
+- Visual states for the lazy loading image implementation.
+- Images start transparent and fade in smoothly once loaded.
+================================================================
+*/
+.poster-card img.lazy {
+    opacity: 0;
+    transition: opacity var(--transition-speed-normal) var(--timing-function);
+}
+
+.poster-card img.loaded {
+    opacity: 1;
+}
+
+/*
+================================================================
+FOOTER
+================================================================
+*/
 .app-footer {
     text-align: center;
     padding: calc(var(--spacing-unit) * 3);
@@ -210,8 +302,6 @@ MAIN CONTENT & FOOTER
 /*
 ================================================================
 VIEW TRANSITIONS (SPA ROUTER SUPPORT)
-- Classes to manage the seamless transitions between views.
-- The router will toggle these classes on view containers.
 ================================================================
 */
 .view {
@@ -219,12 +309,6 @@ VIEW TRANSITIONS (SPA ROUTER SUPPORT)
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(15px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
 }
