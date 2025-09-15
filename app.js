@@ -1,10 +1,9 @@
 /*
 ================================================================
-APP.JS - AWWWARDS-LEVEL ORCHESTRATOR & UX ENGINE (OVERHAULED)
-- Completely rewritten to orchestrate the new visual and interactive experience.
-- Implements advanced animations: scroll-triggered reveals, parallax, page transitions.
-- Manages the UI, from loading skeletons to cinematic detail views.
-- Integrates all data modules into the new, expressive front-end.
+APP.JS - AWWWARDS-LEVEL ORCHESTRATOR & UX ENGINE (BUG FIX & UX PASS)
+- Implements intuitive "drag-to-scroll" functionality for all carousels.
+- Hardens the AI search view against errors and empty states.
+- Refines rendering logic for a smoother, more resilient user experience.
 ================================================================
 */
 
@@ -30,9 +29,6 @@ const state = {
 
 // --- 4. ANIMATION & INTERACTION MODULES ---
 
-/**
- * Manages scroll-triggered animations for elements with the .reveal-on-scroll class.
- */
 const scrollAnimator = {
     observer: null,
     init() {
@@ -47,7 +43,6 @@ const scrollAnimator = {
             }, { threshold: 0.1 });
             this.observe();
         } else {
-            // Fallback for older browsers: reveal all immediately.
             document.querySelectorAll('.reveal-on-scroll').forEach(el => el.classList.add('is-visible'));
         }
     },
@@ -57,14 +52,11 @@ const scrollAnimator = {
     }
 };
 
-/**
- * Manages the custom cursor effect.
- */
 const customCursor = {
     dot: document.querySelector('.cursor-dot'),
     outline: document.querySelector('.cursor-outline'),
     init() {
-        if (window.matchMedia("(pointer: fine)").matches) { // Only for mouse users
+        if (window.matchMedia("(pointer: fine)").matches) {
             body.classList.add('cursor-active');
             window.addEventListener('mousemove', e => {
                 this.dot.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
@@ -75,34 +67,56 @@ const customCursor = {
 };
 
 /**
- * Handles global scroll-based UI changes like the header and parallax.
+ * NEW: Implements intuitive drag-to-scroll for carousels.
  */
+const interactiveCarousel = {
+    init(container = document) {
+        const carousels = container.querySelectorAll('.carousel-content');
+        carousels.forEach(carousel => {
+            let isDown = false;
+            let startX;
+            let scrollLeft;
+
+            carousel.addEventListener('mousedown', (e) => {
+                isDown = true;
+                carousel.style.cursor = 'grabbing';
+                startX = e.pageX - carousel.offsetLeft;
+                scrollLeft = carousel.scrollLeft;
+            });
+
+            const stopDragging = () => {
+                isDown = false;
+                carousel.style.cursor = 'grab';
+            };
+
+            carousel.addEventListener('mouseleave', stopDragging);
+            carousel.addEventListener('mouseup', stopDragging);
+
+            carousel.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - carousel.offsetLeft;
+                const walk = (x - startX) * 2; // The multiplier increases scroll speed
+                carousel.scrollLeft = scrollLeft - walk;
+            });
+
+            carousel.style.cursor = 'grab';
+        });
+    }
+};
+
 function handleGlobalScroll() {
     state.lastScrollY = window.scrollY;
-
-    // Header effect
-    if (state.lastScrollY > 50) {
-        header.classList.add('scrolled');
-    } else {
-        header.classList.remove('scrolled');
-    }
+    header.classList.toggle('scrolled', state.lastScrollY > 50);
     
-    // Parallax effect for detail view backdrop
     const backdrop = document.querySelector('.backdrop-image');
     if (backdrop) {
-        const speed = 0.4;
-        backdrop.style.transform = `translateY(${state.lastScrollY * speed}px)`;
+        backdrop.style.transform = `translateY(${state.lastScrollY * 0.4}px)`;
     }
 }
 
-
 // --- 5. UI & COMPONENT RENDERING ---
 
-/**
- * Renders loading skeletons for a better perceived performance.
- * @param {number} count - The number of skeleton cards to render.
- * @returns {string} HTML string for the skeleton grid.
- */
 function renderLoadingSkeletons(count = 10) {
     const skeletonCard = `<div class="skeleton-card"></div>`;
     return `<div class="skeleton-grid">${skeletonCard.repeat(count)}</div>`;
@@ -150,7 +164,7 @@ async function renderHomeView() {
                 <h1 class="tagline">Cinematic AI Navigator.</h1>
                 <p class="subtitle reveal-on-scroll">An award-winning fusion of design and AI. Discover movies and shows through a futuristic, human-centered experience.</p>
             </section>
-            ${renderLoadingSkeletons(6)}
+            <div class="carousel-placeholder">${renderLoadingSkeletons(6)}</div>
         </div>
     `;
     
@@ -159,14 +173,19 @@ async function renderHomeView() {
             TMDB_API.getTrendingMovies(),
             TMDB_API.getUpcomingMovies()
         ]);
-        appRoot.querySelector('.skeleton-grid').remove();
-        appRoot.innerHTML += `
-            ${renderCarousel('Trending This Week', trending.results)}
-            ${renderCarousel('Coming Soon', upcoming.results)}
-        `;
+        const placeholder = appRoot.querySelector('.carousel-placeholder');
+        if (placeholder) {
+            placeholder.innerHTML = `
+                ${renderCarousel('Trending This Week', trending.results)}
+                ${renderCarousel('Coming Soon', upcoming.results)}
+            `;
+        }
     } catch (error) {
         console.error('Error rendering home view content:', error);
-        appRoot.querySelector('.skeleton-grid').innerHTML = renderError('Could not load movie carousels.');
+        const placeholder = appRoot.querySelector('.carousel-placeholder');
+        if (placeholder) {
+             placeholder.innerHTML = renderError('Could not load movie carousels.');
+        }
     }
 }
 
@@ -182,6 +201,9 @@ async function renderSearchView(query) {
             </div>
         </div>
     `;
+    
+    const resultsGrid = appRoot.querySelector('.search-results-grid');
+    if (!resultsGrid) return; // Defensive check
 
     try {
         const { type } = await GEMINI_API.analyzeQuery(query);
@@ -189,22 +211,27 @@ async function renderSearchView(query) {
         const aiResults = GEMINI_API.parseAIResponse(recommendationsText);
 
         if (aiResults.length === 0) {
-            appRoot.querySelector('.search-results-grid').innerHTML = `<p class="subtitle">The AI couldn't find any results for that query.</p>`;
+            resultsGrid.innerHTML = `<p class="subtitle" style="text-align: center;">The AI couldn't find any recommendations for that query. Try something else!</p>`;
             return;
         }
 
         const tmdbDataPromises = aiResults.map(result => TMDB_API.findTMDBEntry(result.type, result.title, result.year));
         const tmdbResults = (await Promise.all(tmdbDataPromises)).filter(Boolean);
 
-        appRoot.querySelector('.search-results-grid').innerHTML = tmdbResults.map(renderPosterCard).join('');
+        if (tmdbResults.length === 0) {
+            resultsGrid.innerHTML = `<p class="subtitle" style="text-align: center;">Found AI recommendations, but could not match them to our movie database.</p>`;
+            return;
+        }
+
+        resultsGrid.innerHTML = tmdbResults.map(renderPosterCard).join('');
     } catch (error) {
         console.error('Error during AI search:', error);
-        appRoot.querySelector('.search-results-grid').innerHTML = renderError('The AI search failed.');
+        resultsGrid.innerHTML = renderError('The AI search failed. Please check your connection or API keys.');
     }
 }
 
 async function renderDetailView(movieId) {
-    appRoot.innerHTML = `<div class="view detail-view">${renderLoadingSkeletons(1)}</div>`;
+    appRoot.innerHTML = `<div class="view detail-view"><div class="hero-section">${renderLoadingSkeletons(1)}</div></div>`;
     
     try {
         const movie = await TMDB_API.getMovieDetails(movieId);
@@ -247,7 +274,6 @@ async function renderDetailView(movieId) {
 }
 
 async function renderStatsView() {
-    // This view can be styled later to match the new design.
     appRoot.innerHTML = `<div class="view stats-view hero-section"><h1 class="tagline">Stats Coming Soon</h1></div>`;
 }
 
@@ -260,12 +286,11 @@ async function renderSimilarMovies(movieId, containerId) {
             container.innerHTML = renderCarousel('You Might Also Like', similar.results.slice(0, 10));
             lazyLoader.observe(container);
             scrollAnimator.observe(container);
+            interactiveCarousel.init(container); // Initialize drag-to-scroll on new carousel
         }
     } catch (error) { console.warn('Could not fetch similar movies:', error); }
 }
 
-
-// --- 7. UTILITY FUNCTIONS (Lazy Loading) ---
 const lazyLoader = {
     observer: null,
     init() {
@@ -319,16 +344,17 @@ async function router() {
     }
     
     appRoot.classList.add('view-exit');
-    await new Promise(resolve => setTimeout(resolve, 300)); // Match CSS animation
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     await renderFunc(queryParam);
     
     appRoot.classList.remove('view-exit');
     window.scrollTo(0, 0);
 
-    // Re-initialize dynamic elements for the new view
+    // Re-initialize dynamic/interactive elements for the new view
     lazyLoader.observe();
     scrollAnimator.observe();
+    interactiveCarousel.init();
 }
 
 // --- 9. GLOBAL EVENT LISTENERS & INITIALIZATION ---
@@ -353,19 +379,16 @@ function handleSearch(event) {
 }
 
 async function init() {
-    // PWA Service Worker
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/service-worker.js')
             .then(() => console.log('Service Worker Registered'))
             .catch(err => console.error('Service Worker Registration Failed:', err));
     }
 
-    // Event Listeners
     window.addEventListener('hashchange', router);
     window.addEventListener('scroll', handleGlobalScroll, { passive: true });
     searchInput.addEventListener('keydown', handleSearch);
 
-    // Check for Trakt OAuth callback
     const urlParams = new URLSearchParams(window.location.search);
     const traktAuthCode = urlParams.get('code');
     if (traktAuthCode) {
@@ -375,16 +398,13 @@ async function init() {
         window.location.hash = '';
     }
 
-    // Initialize modules
     updateUIForAuthState();
     lazyLoader.init();
     scrollAnimator.init();
     customCursor.init();
     
-    // Initial Route
     await router();
     body.classList.remove('loading');
 }
 
-// --- Let's begin ---
 document.addEventListener('DOMContentLoaded', init);
