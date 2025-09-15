@@ -1,11 +1,11 @@
 {
     "name": "pcinegpt",
     "short_name": "pcinegpt",
-    "description": "An award-winning fusion of design and AI. Discover movies and shows through a futuristic, human-centered experience.",
+    "description": "A Cinematic AI Navigator.",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#18181A",
-    "theme_color": "#18181A",
+    "background_color": "#000000",
+    "theme_color": "#000000",
     "orientation": "portrait-primary",
     "icons": [
         {
@@ -37,17 +37,13 @@
             "src": "/icons/icon-192x192.png",
             "type": "image/png",
             "sizes": "192x192",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "/icons/icon-384x384.png",
-            "type": "image/png",
-            "sizes": "384x384"
+            "purpose": "any"
         },
         {
             "src": "/icons/icon-512x512.png",
             "type": "image/png",
-            "sizes": "512x512"
+            "sizes": "512x512",
+            "purpose": "any maskable"
         }
     ]
 }
