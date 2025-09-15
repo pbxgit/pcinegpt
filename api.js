@@ -1,15 +1,12 @@
 /*
 ================================================================
-API.JS - TMDB API INTERACTION MODULE
-- Handles all communication with The Movie Database (TMDB) API.
-- Exports functions for trending, details, search, etc.
+API.JS - AWWWARDS REBUILD 2025
+- Unified TMDB API interaction module for both movies and TV shows.
 - Manages API key and base URLs with robust error handling.
 ================================================================
 */
 
 // --- Configuration ---
-// IMPORTANT: This is a public key for demonstration. For a real application,
-// consider using a backend proxy to protect your key.
 const API_KEY = '5bd8970deaa0e82346fc042a97499a59';
 const API_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
@@ -19,27 +16,22 @@ const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 /**
  * A generic, robust function to fetch data from any TMDB endpoint.
  * @param {string} endpoint - The TMDB endpoint (e.g., '/movie/popular').
- * @param {string} [queryParams=''] - Optional query parameters (e.g., '&language=en-US').
+ * @param {string} [queryParams=''] - Optional query parameters.
  * @returns {Promise<object>} A promise that resolves to the JSON response data.
  * @throws {Error} If the network response is not ok.
  */
 async function fetchFromTMDB(endpoint, queryParams = '') {
-    // Construct the full URL with the required API key
-    const url = `${API_BASE_URL}${endpoint}?api_key=${API_KEY}${queryParams}`;
-    
+    const url = `${API_BASE_URL}${endpoint}?api_key=${API_KEY}&language=en-US${queryParams}`;
+
     try {
         const response = await fetch(url);
-
-        // Check if the response was successful (status code in the 200-299 range)
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({})); // Try to get error details
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(`HTTP error! Status: ${response.status} - ${errorData.status_message || 'Unknown error'}`);
         }
-
         return await response.json();
     } catch (error) {
         console.error(`Error fetching from TMDB endpoint ${endpoint}:`, error);
-        // Re-throw the error to be handled by the calling function (e.g., in the view renderer)
         throw error;
     }
 }
@@ -47,50 +39,53 @@ async function fetchFromTMDB(endpoint, queryParams = '') {
 // --- Exported API Functions ---
 
 /**
- * Fetches the most popular movies trending this week.
- * @returns {Promise<object>} A promise resolving to the trending movies data.
+ * Fetches trending media for the week.
+ * @param {string} type - The media type ('movie' or 'tv').
+ * @returns {Promise<Array<object>>} A promise resolving to an array of media items.
  */
-export function getTrendingMovies() {
-    return fetchFromTMDB('/trending/movie/week');
+export async function getTrending(type = 'movie') {
+    const data = await fetchFromTMDB(`/trending/${type}/week`);
+    return data.results;
 }
 
 /**
- * Fetches upcoming movies for the US region.
- * @returns {Promise<object>} A promise resolving to the upcoming movies data.
+ * Fetches top-rated media.
+ * @param {string} type - The media type ('movie' or 'tv').
+ * @returns {Promise<Array<object>>} A promise resolving to an array of media items.
  */
-export function getUpcomingMovies() {
-    // Adding region and language parameters for more relevant results
-    return fetchFromTMDB('/movie/upcoming', '&language=en-US&region=US');
+export async function getTopRated(type = 'movie') {
+    const data = await fetchFromTMDB(`/${type}/top_rated`);
+    return data.results;
 }
 
 /**
- * Fetches the full details for a specific movie, including trailers and cast.
- * @param {number} movieId - The TMDB ID of the movie.
- * @returns {Promise<object>} A promise resolving to the movie details object.
+ * Fetches the full details for a specific movie or TV show.
+ * @param {string} type - The media type ('movie' or 'tv').
+ * @param {number} id - The TMDB ID of the media.
+ * @returns {Promise<object>} A promise resolving to the media details object.
  */
-export function getMovieDetails(movieId) {
+export function getMediaDetails(type, id) {
     // Append 'videos' for trailers and 'credits' for cast information
-    return fetchFromTMDB(`/movie/${movieId}`, '&append_to_response=videos,credits');
+    return fetchFromTMDB(`/${type}/${id}`, '&append_to_response=videos,credits');
 }
 
 /**
- * Searches for a movie on TMDB based on its title and year.
- * Returns the first and most likely match.
- * @param {string} type - The content type ('movie' or 'tv').
+ * Searches for a movie or TV show on TMDB based on its title and year.
+ * @param {string} type - The media type ('movie' or 'tv').
  * @param {string} title - The title of the content.
  * @param {string} year - The release year of the content.
- * @returns {Promise<object|null>} The first search result object, or null if no match is found.
+ * @returns {Promise<object|null>} The first search result, or null if no match is found.
  */
 export async function searchTMDB(type, title, year) {
     const endpoint = `/search/${type}`;
-    const queryParams = `&query=${encodeURIComponent(title)}&primary_release_year=${year}`;
+    const yearParam = type === 'movie' ? 'primary_release_year' : 'first_air_date_year';
+    const queryParams = `&query=${encodeURIComponent(title)}&${yearParam}=${year}`;
     try {
         const data = await fetchFromTMDB(endpoint, queryParams);
-        // Return the first result if it exists, otherwise null
         return data.results && data.results.length > 0 ? data.results[0] : null;
     } catch (error) {
         console.error(`Failed to search for ${title} (${year}):`, error);
-        return null; // Return null on error to prevent breaking the search results page
+        return null;
     }
 }
 
@@ -98,13 +93,13 @@ export async function searchTMDB(type, title, year) {
  * Constructs a full URL for a TMDB poster or backdrop image.
  * Provides a fallback placeholder image if the path is missing.
  * @param {string|null} imagePath - The path from the TMDB API (e.g., '/xxxxx.jpg').
- * @param {string} [size='w500'] - The desired image size (e.g., 'w300', 'w500', 'original').
+ * @param {string} [size='w500'] - The desired image size (e.g., 'w500', 'w780', 'original').
  * @returns {string} The complete, absolute URL to the image.
  */
 export function getPosterUrl(imagePath, size = 'w500') {
     if (!imagePath) {
-        // Return a professional-looking placeholder that fits the dark theme
-        return `https://via.placeholder.com/500x750/101010/333333?text=No+Image`;
+        // A neutral placeholder that works with both light and dark themes.
+        return `https://via.placeholder.com/500x750/CCCCCC/FFFFFF?text=No+Image`;
     }
     return `${IMAGE_BASE_URL}${size}${imagePath}`;
 }
