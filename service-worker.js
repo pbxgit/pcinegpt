@@ -1,18 +1,16 @@
 /*
 ================================================================
-SERVICE-WORKER.JS - PWA CORE (REFINED)
-- The core of the Progressive Web App functionality.
-- Implements a "cache-first" strategy for the app shell.
-- Handles the install, activate, and fetch lifecycle events.
-- Ensures the application loads instantly on subsequent visits.
+SERVICE-WORKER.JS
+- The core of the Progressive Web App (PWA).
+- Implements a caching strategy for offline availability.
+- Caches the app shell and API data for a seamless offline experience.
 ================================================================
 */
 
-// A descriptive and versioned cache name for easier management.
-const CACHE_NAME = 'pcinegpt-shell-v1.1';
+const APP_CACHE_NAME = 'pcinegpt-shell-v1';
+const DATA_CACHE_NAME = 'pcinegpt-data-v1';
 
-// A list of all the essential files that make up the app shell.
-// This list must be updated if core filenames change.
+// A list of all the essential files that make up the app's user interface.
 const APP_SHELL_URLS = [
     '/',
     '/index.html',
@@ -22,27 +20,26 @@ const APP_SHELL_URLS = [
     '/gemini.js',
     '/trakt.js',
     '/storage.js',
-    '/manifest.json',
     '/icons/favicon.png',
     '/icons/icon-192x192.png',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
+    '/icons/icon-512x512.png',
+    'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap',
+    'https://unpkg.com/lucide@latest'
 ];
 
 /**
  * INSTALL Event
  * Fired when the service worker is first installed.
- * Opens a cache and adds all the app shell files to it.
+ * Opens a cache and adds the app shell files to it for offline use.
  */
 self.addEventListener('install', event => {
-    console.log('[Service Worker] Install event fired.');
+    console.log('[Service Worker] Install');
     event.waitUntil(
-        caches.open(CACHE_NAME)
+        caches.open(APP_CACHE_NAME)
             .then(cache => {
-                console.log('[Service Worker] Caching app shell files.');
+                console.log('[Service Worker] Caching app shell');
+                // addAll() is atomic. If one file fails, the whole operation fails.
                 return cache.addAll(APP_SHELL_URLS);
-            })
-            .catch(error => {
-                console.error('[Service Worker] Failed to cache app shell:', error);
             })
     );
 });
@@ -53,15 +50,15 @@ self.addEventListener('install', event => {
  * This is the ideal place to clean up old, unused caches.
  */
 self.addEventListener('activate', event => {
-    console.log('[Service Worker] Activate event fired.');
+    console.log('[Service Worker] Activate');
     event.waitUntil(
         caches.keys().then(cacheNames => {
             return Promise.all(
-                cacheNames.map(cacheName => {
-                    // If a cache's name is not our current one, we delete it.
-                    if (cacheName !== CACHE_NAME) {
-                        console.log(`[Service Worker] Deleting old cache: ${cacheName}`);
-                        return caches.delete(cacheName);
+                cacheNames.map(cache => {
+                    // Delete any caches that are not the current app or data cache.
+                    if (cache !== APP_CACHE_NAME && cache !== DATA_CACHE_NAME) {
+                        console.log('[Service Worker] Clearing old cache:', cache);
+                        return caches.delete(cache);
                     }
                 })
             );
@@ -74,28 +71,38 @@ self.addEventListener('activate', event => {
 /**
  * FETCH Event
  * Fired for every network request made by the page.
- * Implements a "cache-first" strategy for app shell assets.
- * 1. Look for a matching response in the cache.
- * 2. If found, return it immediately.
- * 3. If not found, fetch it from the network.
+ * Implements a caching strategy to serve content offline.
  */
 self.addEventListener('fetch', event => {
-    // We only apply the cache-first strategy to GET requests.
-    if (event.request.method !== 'GET') {
-        return;
-    }
+    const url = new URL(event.request.url);
 
-    event.respondWith(
-        caches.match(event.request)
-            .then(cachedResponse => {
-                // If a cached response is found, return it.
-                if (cachedResponse) {
-                    // console.log(`[Service Worker] Serving from cache: ${event.request.url}`);
-                    return cachedResponse;
-                }
-                // Otherwise, fetch the request from the network.
-                // console.log(`[Service Worker] Fetching from network: ${event.request.url}`);
-                return fetch(event.request);
+    // Strategy 1: For API calls (data), use Network First, Falling Back to Cache.
+    // This ensures data is fresh when online, but the app is still usable offline.
+    if (url.hostname === 'api.themoviedb.org') {
+        event.respondWith(
+            caches.open(DATA_CACHE_NAME).then(cache => {
+                return fetch(event.request).then(response => {
+                    // If the network request is successful, cache a clone of the response.
+                    if (response.status === 200) {
+                        cache.put(event.request.url, response.clone());
+                    }
+                    return response;
+                }).catch(() => {
+                    // If the network request fails (offline), return the cached response if it exists.
+                    return caches.match(event.request);
+                });
             })
-    );
+        );
+    }
+    // Strategy 2: For App Shell resources, use Cache First, Falling Back to Network.
+    // This makes the app load instantly from the cache.
+    else {
+        event.respondWith(
+            caches.match(event.request)
+                .then(response => {
+                    // Return the cached response if found, otherwise fetch from the network.
+                    return response || fetch(event.request);
+                })
+        );
+    }
 });
