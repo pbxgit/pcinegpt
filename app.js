@@ -1,141 +1,373 @@
 /*
 ================================================================
-TRAKT.JS - TRAKT.TV API & OAUTH 2.0 (PKCE) MODULE (Corrected Version)
-- Manages the full, secure OAuth 2.0 PKCE authentication flow.
-- Handles making authenticated API requests for user stats,
-  history, and ratings.
-- Implements token management and automatic logout on 401 errors.
+APP.JS - AWWWARDS REBUILD 2025
+- Core application logic for the new conversational experience.
+- Manages theme, state, routing, and dynamic view rendering.
 ================================================================
 */
 
-import { saveTraktTokens, getTraktTokens, clearTraktTokens } from './storage.js';
+// --- MODULE IMPORTS ---
+import * as api from './api.js';
+import * as gemini from './gemini.js';
+import * as trakt from './trakt.js';
+import * as storage from './storage.js';
 
-// --- Configuration ---
-const CLIENT_ID = '4817758e941a6135b5efc85f8ec52d5ebd72b677fab299fb94f2bb5d1bcb8843';
-// BUG FIX: Use a dynamic redirect URI to support any domain (localhost, production, etc.)
-const REDIRECT_URI = window.location.origin + window.location.pathname;
-const TRAKT_API_URL = 'https://api.trakt.tv';
+// --- DOM ELEMENT SELECTORS ---
+const dom = {
+    root: document.getElementById('app-root'),
+    header: document.querySelector('.app-header'),
+    trakt: {
+        authBtn: document.getElementById('trakt-auth-button'),
+        statsLink: document.getElementById('stats-nav-link'),
+    },
+    themeToggleBtn: document.getElementById('theme-toggle-button'),
+};
 
-// --- PKCE (Proof Key for Code Exchange) Helper Functions ---
+// --- APPLICATION STATE ---
+const state = {
+    isTraktAuthenticated: false,
+    currentTheme: 'light',
+};
 
-function generateCodeVerifier(length) {
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    let text = '';
-    for (let i = 0; i < length; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
+// ================================================================
+// --- THEME MANAGEMENT ---
+// ================================================================
+
+function applyTheme(theme) {
+    state.currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('pcinegpt_theme', theme);
+
+    // Toggle icon visibility
+    const sunIcon = dom.themeToggleBtn.querySelector('.theme-icon-sun');
+    const moonIcon = dom.themeToggleBtn.querySelector('.theme-icon-moon');
+    if (theme === 'dark') {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    } else {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
     }
-    return text;
 }
 
-async function generateCodeChallenge(verifier) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await window.crypto.subtle.digest('SHA-256', data);
-
-    return btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+function toggleTheme() {
+    const newTheme = state.currentTheme === 'light' ? 'dark' : 'light';
+    applyTheme(newTheme);
 }
 
-// --- Core Authentication Flow ---
-export async function redirectToTraktAuth() {
-    const verifier = generateCodeVerifier(128);
-    sessionStorage.setItem('trakt_code_verifier', verifier);
-    const challenge = await generateCodeChallenge(verifier);
-    const authUrl = new URL(`${TRAKT_API_URL}/oauth/authorize`);
-    authUrl.searchParams.append('response_type', 'code');
-    authUrl.searchParams.append('client_id', CLIENT_ID);
-    authUrl.searchParams.append('redirect_uri', REDIRECT_URI);
-    authUrl.searchParams.append('code_challenge', challenge);
-    authUrl.searchParams.append('code_challenge_method', 'S256');
-    window.location.href = authUrl.toString();
+function initTheme() {
+    const savedTheme = localStorage.getItem('pcinegpt_theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+    applyTheme(theme);
 }
 
-export async function handleTraktCallback(authCode) {
-    const verifier = sessionStorage.getItem('trakt_code_verifier');
-    if (!verifier) throw new Error('Code verifier not found in session storage.');
+// ================================================================
+// --- ROUTING & VIEW RENDERING ---
+// ================================================================
 
-    const body = JSON.stringify({
-        code: authCode,
-        client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
-        grant_type: 'authorization_code',
-        code_verifier: verifier
-    });
+const routes = {
+    '/': 'renderHomeView',
+    '/movie/:id': 'renderDetailView',
+    '/tv/:id': 'renderDetailView', // Reuse detail view for TV
+    '/search/:query': 'renderSearchView',
+    '/stats': 'renderStatsView',
+};
+
+async function router() {
+    dom.root.innerHTML = ''; // Clear previous view
+    showLoading();
+
+    const hash = window.location.hash.substring(1) || '/';
+    const [path, param] = hash.split(/(?<=^\/[a-zA-Z]+)\/(.*)/s).filter(Boolean);
+    const routeHandlerName = routes[path] || routes['/'];
+    const handler = viewHandlers[routeHandlerName];
 
     try {
-        const response = await fetch(`${TRAKT_API_URL}/oauth/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to exchange authorization code for tokens.');
-        }
-
-        const tokens = await response.json();
-        saveTraktTokens(tokens);
-
+        const type = path.includes('/tv/') ? 'tv' : 'movie';
+        await handler({ param, type });
     } catch (error) {
-        console.error('Error during Trakt token exchange:', error);
-        clearTraktTokens();
-    } finally {
-        sessionStorage.removeItem('trakt_code_verifier');
-        // Clean the URL without a full page reload, letting the app's router take over.
-        window.history.replaceState({}, document.title, window.location.pathname);
+        console.error(`Failed to render view: ${routeHandlerName}`, error);
+        renderError('Could not load content.');
     }
 }
 
-export function logoutTrakt() {
-    clearTraktTokens();
-    console.log('Logged out from Trakt.');
-    location.reload(); // A full reload is simplest and safest for logout.
-}
+const viewHandlers = {
+    async renderHomeView() {
+        // Render the conversational UI instantly for great perceived performance
+        const aiPromptHtml = createAIPrompt();
+        render(aiPromptHtml, { instant: true });
 
-// --- Authenticated API Fetching ---
-async function fetchFromTrakt(endpoint) {
-    const tokens = getTraktTokens();
-    if (!tokens) throw new Error('User is not authenticated with Trakt.');
+        // Asynchronously fetch and render all discovery carousels
+        loadDiscoveryCarousels();
+    },
 
-    const url = `${TRAKT_API_URL}${endpoint}`;
-    const headers = {
-        'Content-Type': 'application/json',
-        'trakt-api-version': '2',
-        'trakt-api-key': CLIENT_ID,
-        'Authorization': `Bearer ${tokens.access_token}`
-    };
+    async renderDetailView({ param: id, type }) {
+        const details = await api.getMediaDetails(type, id);
+        const releaseYear = (details.release_date || details.first_air_date || '').split('-')[0];
+        
+        const html = `
+            <div class="view detail-view">
+                <div class="detail-poster">
+                    <img src="${api.getPosterUrl(details.poster_path, 'w780')}" alt="${details.title || details.name}">
+                </div>
+                <div class="detail-info">
+                    <h1>${details.title || details.name}</h1>
+                    <div class="detail-meta">
+                        <span>${releaseYear}</span>
+                        ${details.runtime ? `<span>• ${details.runtime} min</span>` : ''}
+                        <span>• ★ ${details.vote_average.toFixed(1)}</span>
+                    </div>
+                    <p>${details.overview}</p>
+                    <button class="trakt-button" style="margin-top: 2rem;">Add to Watchlist</button>
+                </div>
+            </div>
+        `;
+        render(html);
+    },
 
-    const response = await fetch(url, { headers });
+    async renderSearchView({ param: query }) {
+        const decodedQuery = decodeURIComponent(query);
+        let html = `<div class="view search-view">
+                        <h1 style="text-align: center; font-size: var(--font-size-xl); margin-bottom: 2rem;">Results for "${decodedQuery}"</h1>
+                    </div>`;
+        render(html, { instant: true });
 
-    if (!response.ok) {
-        if (response.status === 401) {
-            logoutTrakt();
+        const recommendationsText = await gemini.getAIRecommendations({ searchQuery: decodedQuery });
+        const results = await parseAndFetchGeminiResults(recommendationsText);
+        
+        if (results.length > 0) {
+            const searchCarousel = createCarousel('AI Recommendations', results);
+            document.querySelector('.search-view').insertAdjacentHTML('beforeend', searchCarousel);
+        } else {
+            renderError('The AI could not find any results for that query.', document.querySelector('.search-view'));
         }
-        throw new Error(`Trakt API error! Status: ${response.status}`);
+    },
+
+    async renderStatsView() {
+        if (!state.isTraktAuthenticated) {
+            window.location.hash = '/'; // Redirect home if not logged in
+            return;
+        }
+        const stats = await trakt.getUserStats();
+        // ... (Stats rendering logic would go here, similar to previous version but with new styling)
+        render(`<h1>Stats Page (WIP)</h1>`);
     }
-    return response.json();
+};
+
+function render(html, options = {}) {
+    const target = options.target || dom.root;
+    if (options.instant) {
+        target.innerHTML = html;
+    } else {
+        target.innerHTML = ''; // Clear loading spinner
+        target.insertAdjacentHTML('beforeend', html);
+    }
+    // Re-bind events on dynamic elements
+    bindSearchInputEvents();
 }
 
-export function getUserStats() {
-    return fetchFromTrakt('/users/me/stats');
+function renderError(message, target = dom.root) {
+    target.innerHTML = `<div class="error-view" style="text-align: center;"><p>${message}</p></div>`;
 }
 
-export async function getTraktHistory() {
-    const [movies, shows] = await Promise.all([
-        fetchFromTrakt('/users/me/history/movies?limit=15'),
-        fetchFromTrakt('/users/me/history/shows?limit=15')
-    ]);
-    return [...movies, ...shows];
+// ================================================================
+// --- DYNAMIC CONTENT LOADING ---
+// ================================================================
+
+async function loadDiscoveryCarousels() {
+    const carouselContainer = document.querySelector('.carousel-master-container');
+    if (!carouselContainer) return;
+
+    const carouselsToLoad = [
+        { title: "Trending Movies", fetcher: () => api.getTrending('movie'), type: 'movie' },
+        { title: "Trending TV Shows", fetcher: () => api.getTrending('tv'), type: 'tv' },
+        { title: "Top Rated Movies", fetcher: () => api.getTopRated('movie'), type: 'movie' },
+        { title: "Top Rated TV Shows", fetcher: () => api.getTopRated('tv'), type: 'tv' },
+    ];
+
+    if (state.isTraktAuthenticated) {
+        // Add personalized carousels to the loading queue
+        carouselsToLoad.push({ 
+            title: "Based on Your Top Ratings", 
+            fetcher: getTraktPersonalizedRecs, 
+            type: 'movie' // Assuming movie recs for now
+        });
+    }
+
+    // Load and render carousels with a staggered animation effect
+    for (let i = 0; i < carouselsToLoad.length; i++) {
+        try {
+            const { title, fetcher, type } = carouselsToLoad[i];
+            const data = await fetcher();
+            if (data && data.length > 0) {
+                const carouselHtml = createCarousel(title, data, type);
+                const carouselEl = document.createElement('div');
+                carouselEl.className = 'carousel-container';
+                carouselEl.style.animationDelay = `${i * 150}ms`;
+                carouselEl.innerHTML = carouselHtml;
+                carouselContainer.appendChild(carouselEl);
+            }
+        } catch (error) {
+            console.error(`Failed to load carousel:`, error);
+        }
+    }
 }
 
-export async function getTraktRatings() {
-    const [movies10, shows10, movies9, shows9] = await Promise.all([
-        fetchFromTrakt('/users/me/ratings/movies/10?limit=15'),
-        fetchFromTrakt('/users/me/ratings/shows/10?limit=15'),
-        fetchFromTrakt('/users/me/ratings/movies/9?limit=15'),
-        fetchFromTrakt('/users/me/ratings/shows/9?limit=15')
-    ]);
-    return [...movies10, ...shows10, ...movies9, ...shows9];
+async function getTraktPersonalizedRecs() {
+    const ratings = await trakt.getTraktRatings();
+    if (ratings.length === 0) return [];
+    
+    // Pick a random highly rated item to base recommendations on
+    const seedItem = ratings[Math.floor(Math.random() * ratings.length)];
+    const seedTitle = seedItem.movie?.title || seedItem.show?.title;
+    const seedType = seedItem.movie ? 'movie' : 'show';
+
+    const prompt = `The user highly rated "${seedTitle}". Recommend 10 similar ${seedType}s.`;
+    const geminiResponse = await gemini.getAIRecommendations({ searchQuery: prompt, type: seedType });
+    return parseAndFetchGeminiResults(geminiResponse);
 }
+
+async function parseAndFetchGeminiResults(geminiResponse) {
+    if (!geminiResponse) return [];
+    const lines = geminiResponse.trim().split('\n');
+    const promises = lines.map(line => {
+        const [type, title, year] = line.split('|');
+        if (type && title && year) {
+            return api.searchTMDB(type, title, year);
+        }
+        return null;
+    }).filter(Boolean);
+    
+    const results = await Promise.all(promises);
+    return results.filter(Boolean); // Filter out any null results from failed searches
+}
+
+
+// ================================================================
+// --- COMPONENT FACTORIES ---
+// ================================================================
+
+function createAIPrompt() {
+    return `
+        <div class="view home-view">
+            <div class="ai-prompt-container">
+                <h1>Your Conversational Movie Navigator</h1>
+                <p>Tell me what you're in the mood for. A genre, an actor, a vibe – anything.</p>
+                <div class="search-input-wrapper">
+                    <input type="text" class="search-input" id="main-search-input" placeholder="e.g., &quot;space operas like Dune&quot;">
+                </div>
+                <div class="suggestion-chips">
+                    <button class="chip" data-query="mind-bending sci-fi movies">Sci-Fi</button>
+                    <button class="chip" data-query="cozy mystery shows">Mysteries</button>
+                    <button class="chip" data-query="oscar winning dramas from the 90s">Dramas</button>
+                </div>
+            </div>
+            <div class="carousel-master-container">
+                <!-- Carousels will be dynamically inserted here -->
+            </div>
+        </div>
+    `;
+}
+
+function createCarousel(title, items, type = 'movie') {
+    return `
+        <h2 class="carousel-title">${title}</h2>
+        <div class="carousel-content">
+            ${items.map(item => createPosterCard(item, type)).join('')}
+        </div>
+    `;
+}
+
+function createPosterCard(item, type) {
+    const title = item.title || item.name;
+    const hrefType = item.media_type || type;
+    return `
+        <div class="poster-card">
+            <a href="#/${hrefType}/${item.id}">
+                <img src="${api.getPosterUrl(item.poster_path)}" alt="${title}" loading="lazy">
+                <div class="poster-overlay">
+                    <span>${title}</span>
+                </div>
+            </a>
+        </div>
+    `;
+}
+
+// ================================================================
+// --- EVENT HANDLING & INITIALIZATION ---
+// ================================================================
+
+function handleSearch(query) {
+    if (query && query.trim() !== '') {
+        window.location.hash = `#/search/${encodeURIComponent(query.trim())}`;
+    }
+}
+
+function bindSearchInputEvents() {
+    const searchInput = document.getElementById('main-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleSearch(e.target.value);
+            }
+        });
+    }
+
+    document.querySelectorAll('.chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            handleSearch(chip.dataset.query);
+        });
+    });
+}
+
+function showLoading() {
+    dom.root.innerHTML = `<div class="loading-container"><div class="spinner"></div></div>`;
+}
+
+function updateAuthUI() {
+    if (storage.getTraktTokens()) {
+        state.isTraktAuthenticated = true;
+        dom.trakt.authBtn.textContent = 'Logout';
+        dom.trakt.statsLink.style.display = 'inline';
+    } else {
+        state.isTraktAuthenticated = false;
+        dom.trakt.authBtn.textContent = 'Connect Trakt';
+        dom.trakt.statsLink.style.display = 'none';
+    }
+}
+
+async function handleAuthCallback() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get('code');
+    if (authCode) {
+        await trakt.handleTraktCallback(authCode);
+        updateAuthUI();
+        window.location.hash = '/'; // Go home after auth
+    }
+}
+
+function initEventListeners() {
+    window.addEventListener('hashchange', router);
+    dom.themeToggleBtn.addEventListener('click', toggleTheme);
+    dom.trakt.authBtn.addEventListener('click', () => {
+        state.isTraktAuthenticated ? trakt.logoutTrakt() : trakt.redirectToTraktAuth();
+    });
+}
+
+async function init() {
+    // Initialize icons
+    lucide.createIcons();
+
+    // Setup UI
+    initTheme();
+    initEventListeners();
+
+    // Handle authentication and routing
+    await handleAuthCallback();
+    updateAuthUI();
+    router();
+}
+
+// Start the application
+init();
