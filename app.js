@@ -53,22 +53,21 @@ class HomeView {
                 </section>
                 <section id="trending-carousel" class="carousel">
                     <h2>Trending Now</h2>
-                    <div class="carousel-content">
-                        <div class="placeholder"></div>
-                    </div>
+                    <div class="carousel-content"></div>
                 </section>
                 <section id="upcoming-carousel" class="carousel">
                     <h2>Coming Soon</h2>
-                    <div class="carousel-content">
-                         <div class="placeholder"></div>
-                    </div>
+                    <div class="carousel-content"></div>
                 </section>
             </div>
         `;
 
         // Asynchronously fetch and render the carousels
-        this.renderCarousel('#trending-carousel', getTrendingMovies);
-        this.renderCarousel('#upcoming-carousel', getUpcomingMovies);
+        await this.renderCarousel('#trending-carousel', getTrendingMovies);
+        await this.renderCarousel('#upcoming-carousel', getUpcomingMovies);
+
+        // After rendering, initialize lazy loading for all new images.
+        lazyLoadImages();
     }
 
     /**
@@ -85,11 +84,12 @@ class HomeView {
             const movies = data.results;
 
             if (movies && movies.length > 0) {
+                // Generate HTML with data-src for lazy loading
                 const postersHTML = movies.map(movie => {
                     if (!movie.poster_path) return '';
                     return `
                         <div class="poster-card" data-movie-id="${movie.id}">
-                            <img src="${getPosterUrl(movie.poster_path)}" alt="${movie.title}" loading="lazy">
+                            <img class="lazy" data-src="${getPosterUrl(movie.poster_path)}" alt="${movie.title}">
                         </div>
                     `;
                 }).join('');
@@ -107,18 +107,52 @@ class HomeView {
 window.HomeView = HomeView;
 
 /**
+ * Implements lazy loading for images using the Intersection Observer API.
+ * It targets all images with the class 'lazy' and replaces their
+ * data-src with src when they enter the viewport.
+ */
+function lazyLoadImages() {
+    const lazyImages = document.querySelectorAll('img.lazy');
+
+    if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    img.src = img.dataset.src; // Load the image
+                    
+                    // Once the image is loaded, add the 'loaded' class for the fade-in effect
+                    img.onload = () => {
+                        img.classList.remove('lazy');
+                        img.classList.add('loaded');
+                    };
+                    
+                    observer.unobserve(img); // Clean up and stop observing the loaded image
+                }
+            });
+        });
+
+        lazyImages.forEach(img => observer.observe(img));
+    } else {
+        // Fallback for browsers that do not support Intersection Observer
+        lazyImages.forEach(img => {
+            img.src = img.dataset.src;
+            img.classList.remove('lazy');
+            img.classList.add('loaded');
+        });
+    }
+}
+
+
+/**
  * Registers the service worker for PWA functionality.
  */
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/service-worker.js')
-                .then(registration => {
-                    console.log('Service Worker registered with scope:', registration.scope);
-                })
-                .catch(error => {
-                    console.error('Service Worker registration failed:', error);
-                });
+                .then(reg => console.log('Service Worker registered.', reg))
+                .catch(err => console.error('Service Worker registration failed:', err));
         });
     }
 }
@@ -127,7 +161,7 @@ function registerServiceWorker() {
  * Main App Initializer
  */
 function initialize() {
-    registerServiceWorker(); // Register the service worker
+    registerServiceWorker();
     
     window.addEventListener('hashchange', () => router.navigate());
     window.addEventListener('load', () => router.navigate());
