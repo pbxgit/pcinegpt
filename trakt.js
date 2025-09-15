@@ -13,12 +13,28 @@ const CLIENT_ID = '4817758e941a6135b5efc85f8ec52d5ebd72b677fab299fb94f2bb5d1bcb8
 const REDIRECT_URI = 'https://pcinegpt.netlify.app';
 const TRAKT_API_URL = 'https://api.trakt.tv';
 
-// --- PKCE & Auth Flow Functions (Unchanged) ---
-async function generateCodeChallenge(verifier) { /* ... */ }
-function generateCodeVerifier(length) { /* ... */ }
-// For brevity, the existing functions are collapsed. Assume they are still here.
-const generateCodeVerifier = l=>[...crypto.getRandomValues(new Uint8Array(l))].map(c=>(c%62<10?c%62:c%62<36?String.fromCharCode(c%62+55):String.fromCharCode(c%62+61))).join('');async function generateCodeChallenge(v){const d=new TextEncoder().encode(v);const h=await crypto.subtle.digest('SHA-256',d);return btoa(String.fromCharCode(...new Uint8Array(h))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+// --- PKCE Helper Functions ---
+function generateCodeVerifier(length) {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    let text = '';
+    for (let i = 0; i < length; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
 
+async function generateCodeChallenge(verifier) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+// --- Core Authentication Flow ---
 export async function redirectToTraktAuth() {
     const verifier = generateCodeVerifier(128);
     sessionStorage.setItem('trakt_code_verifier', verifier);
@@ -31,6 +47,7 @@ export async function redirectToTraktAuth() {
     authUrl.searchParams.append('code_challenge_method', 'S256');
     window.location.href = authUrl.toString();
 }
+
 export async function handleTraktCallback(authCode) {
     const verifier = sessionStorage.getItem('trakt_code_verifier');
     if (!verifier) throw new Error('Code verifier not found.');
@@ -47,25 +64,17 @@ export async function handleTraktCallback(authCode) {
         clearTraktTokens();
     }
 }
+
 export function logoutTrakt() {
     clearTraktTokens();
     console.log('Logged out from Trakt.');
     location.reload();
 }
 
-// --- NEW: Authenticated API Fetching ---
-
-/**
- * A generic, authenticated fetch wrapper for the Trakt API.
- * @param {string} endpoint - The API endpoint to request (e.g., '/users/me/stats').
- * @returns {Promise<object>} A promise that resolves to the JSON response data.
- */
+// --- Authenticated API Fetching ---
 async function fetchFromTrakt(endpoint) {
     const tokens = getTraktTokens();
     if (!tokens) throw new Error('User is not authenticated with Trakt.');
-
-    // Note: A full production app would handle token refreshing here.
-    // For this project, we assume tokens are valid.
 
     const url = `${TRAKT_API_URL}${endpoint}`;
     const headers = {
@@ -78,7 +87,6 @@ async function fetchFromTrakt(endpoint) {
     const response = await fetch(url, { headers });
 
     if (!response.ok) {
-        // If unauthorized, clear tokens as they might be invalid
         if (response.status === 401) {
             clearTraktTokens();
             location.reload();
@@ -88,10 +96,6 @@ async function fetchFromTrakt(endpoint) {
     return response.json();
 }
 
-/**
- * Fetches the statistics for the authenticated user.
- * @returns {Promise<object>} The user's stats object from Trakt.
- */
 export function getUserStats() {
     return fetchFromTrakt('/users/me/stats');
 }
