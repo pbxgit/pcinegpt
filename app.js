@@ -1,15 +1,16 @@
 /*
 ================================================================
 APP.JS - MAIN APPLICATION ENTRY POINT
-- Initializes the application and service worker.
+- Initializes the application, service worker, and authentication logic.
 - Contains the client-side router for SPA-like navigation.
 - Manages the rendering of different 'views' into the app-root.
 ================================================================
 */
 
-// Import API and Storage functions
+// Import API, Storage, and Trakt functions
 import { getTrendingMovies, getUpcomingMovies, getPosterUrl } from './api.js';
-import { getWatchlist, addToWatchlist, removeFromWatchlist, isMovieInWatchlist } from './storage.js';
+import { getWatchlist, addToWatchlist, removeFromWatchlist, isMovieInWatchlist, getTraktTokens } from './storage.js';
+import { redirectToTraktAuth, handleTraktCallback, logoutTrakt } from './trakt.js';
 
 /**
  * A simple, hash-based router for navigating between views without
@@ -63,33 +64,22 @@ class HomeView {
             </div>
         `;
 
-        // Asynchronously fetch and render the carousels
         await this.renderCarousel('#trending-carousel', getTrendingMovies);
         await this.renderCarousel('#upcoming-carousel', getUpcomingMovies);
-
-        // After rendering, initialize lazy loading for all new images.
         lazyLoadImages();
     }
 
-    /**
-     * Fetches data and renders a carousel with watchlist icons.
-     * @param {string} carouselId - The CSS selector for the carousel container.
-     * @param {Function} apiFunction - The function from api.js to call.
-     */
     async renderCarousel(carouselId, apiFunction) {
         const carousel = document.querySelector(carouselId);
         const contentContainer = carousel.querySelector('.carousel-content');
-
         try {
             const data = await apiFunction();
             const movies = data.results;
-
             if (movies && movies.length > 0) {
                 const postersHTML = movies.map(movie => {
                     if (!movie.poster_path) return '';
                     const isInWatchlist = isMovieInWatchlist(movie.id);
                     const activeClass = isInWatchlist ? 'active' : '';
-
                     return `
                         <div class="poster-card" data-movie-id="${movie.id}">
                             <img class="lazy" data-src="${getPosterUrl(movie.poster_path)}" alt="${movie.title}">
@@ -112,17 +102,11 @@ class HomeView {
 
 window.HomeView = HomeView;
 
-/**
- * Handles clicks on the watchlist (favorite) icons using event delegation.
- * @param {Event} event - The click event.
- */
 function handleWatchlistClick(event) {
     const icon = event.target.closest('.favorite-icon');
     if (!icon) return;
-
     const movieId = parseInt(icon.dataset.movieId, 10);
     if (!movieId) return;
-
     if (isMovieInWatchlist(movieId)) {
         removeFromWatchlist(movieId);
         icon.classList.remove('active');
@@ -132,9 +116,6 @@ function handleWatchlistClick(event) {
     }
 }
 
-/**
- * Implements lazy loading for images using the Intersection Observer API.
- */
 function lazyLoadImages() {
     const lazyImages = document.querySelectorAll('img.lazy');
     if ('IntersectionObserver' in window) {
@@ -143,10 +124,7 @@ function lazyLoadImages() {
                 if (entry.isIntersecting) {
                     const img = entry.target;
                     img.src = img.dataset.src;
-                    img.onload = () => {
-                        img.classList.remove('lazy');
-                        img.classList.add('loaded');
-                    };
+                    img.onload = () => { img.classList.remove('lazy'); img.classList.add('loaded'); };
                     observer.unobserve(img);
                 }
             });
@@ -161,9 +139,6 @@ function lazyLoadImages() {
     }
 }
 
-/**
- * Registers the service worker for PWA functionality.
- */
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -175,21 +150,64 @@ function registerServiceWorker() {
 }
 
 /**
+ * Updates the UI state of the Trakt button based on login status.
+ */
+function updateTraktButtonUI() {
+    const authButton = document.getElementById('trakt-auth-button');
+    if (!authButton) return;
+
+    if (getTraktTokens()) {
+        authButton.textContent = 'Logout Trakt';
+        authButton.classList.add('connected'); // Optional: for styling
+    } else {
+        authButton.textContent = 'Connect Trakt';
+        authButton.classList.remove('connected');
+    }
+}
+
+/**
  * Main App Initializer
  */
-function initialize() {
+async function initialize() {
     registerServiceWorker();
-    
-    // Add a single, delegated event listener for all watchlist clicks
+
     document.getElementById('app-root').addEventListener('click', handleWatchlistClick);
 
-    window.addEventListener('hashchange', () => router.navigate());
-    window.addEventListener('load', () => router.navigate());
+    // Set up Trakt button listener
+    const authButton = document.getElementById('trakt-auth-button');
+    authButton.addEventListener('click', () => {
+        if (getTraktTokens()) {
+            logoutTrakt();
+        } else {
+            redirectToTraktAuth();
+        }
+    });
 
-    if (!window.location.hash) {
-        window.location.hash = '#home';
-    } else {
-        router.navigate();
+    // Check for Trakt auth callback code in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get('code');
+    if (authCode) {
+        await handleTraktCallback(authCode);
+    }
+    
+    // Initial UI update and navigation
+    updateTraktButtonUI();
+    window.addEventListener('hashchange', () => router.navigate());
+    window.addEventListener('load', () => {
+        if (!window.location.hash) {
+            window.location.hash = '#home';
+        } else {
+            router.navigate();
+        }
+    });
+
+    // Initial navigation if not triggered by load event
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        if (!window.location.hash) {
+            window.location.hash = '#home';
+        } else {
+            router.navigate();
+        }
     }
 }
 
