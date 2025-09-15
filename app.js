@@ -1,66 +1,50 @@
 /*
 ================================================================
 APP.JS - MAIN APPLICATION ENTRY POINT
-- Initializes the application.
+- Initializes the application and service worker.
 - Contains the client-side router for SPA-like navigation.
 - Manages the rendering of different 'views' into the app-root.
 ================================================================
 */
 
+// Import API functions
+import { getTrendingMovies, getUpcomingMovies, getPosterUrl } from './api.js';
+
 /**
  * A simple, hash-based router for navigating between views without
  * full page reloads, enabling a fluid SPA experience.
- *
- * It works by mapping URL hash fragments (e.g., #home, #detail/123)
- * to specific view rendering functions.
  */
 const router = {
-    // Maps URL hash routes to their corresponding view components.
     routes: {
-        '': 'HomeView', // Default route
+        '': 'HomeView',
         'home': 'HomeView',
-        // Example for a detail view: 'detail/:id': DetailView,
     },
 
-    /**
-     * Finds the matching view for the current URL hash and renders it.
-     * It also handles simple parameter extraction (e.g., an ID from the URL).
-     */
     async navigate() {
         const path = window.location.hash.slice(1).toLowerCase().split('/')[0] || '/';
-        const viewName = this.routes[path] || this.routes['']; // Fallback to HomeView
+        const viewName = this.routes[path] || this.routes[''];
 
         if (viewName) {
-            // Dynamically create an instance of the view and render it.
             const view = new window[viewName]();
             view.render();
         } else {
             console.error(`No route found for path: ${path}`);
-            // Optionally, render a "404 Not Found" view.
         }
     }
 };
 
 /**
  * Represents the Home View.
- * This class is responsible for fetching data and rendering the
- * main landing page of the application, including dynamic carousels.
+ * Renders the main landing page and populates it with dynamic data.
  */
 class HomeView {
-    /**
-     * Renders the HTML structure for the home view into the app's root element.
-     * This is a placeholder and will be populated with dynamic TMDB data
-     * in a future milestone.
-     */
-    render() {
+    async render() {
         const appRoot = document.getElementById('app-root');
         if (!appRoot) {
             console.error('App root element #app-root not found!');
             return;
         }
 
-        // The initial HTML structure for the home view.
-        // It's designed with placeholders for the dynamic carousels.
         appRoot.innerHTML = `
             <div class="view home-view">
                 <section class="hero-section">
@@ -70,39 +54,89 @@ class HomeView {
                 <section id="trending-carousel" class="carousel">
                     <h2>Trending Now</h2>
                     <div class="carousel-content">
-                        <!-- Movie posters will be dynamically inserted here -->
-                        <p style="color: var(--color-subtle-text);">Loading content...</p>
+                        <div class="placeholder"></div>
                     </div>
                 </section>
                 <section id="upcoming-carousel" class="carousel">
                     <h2>Coming Soon</h2>
                     <div class="carousel-content">
-                        <!-- Movie posters will be dynamically inserted here -->
+                         <div class="placeholder"></div>
                     </div>
                 </section>
             </div>
         `;
+
+        // Asynchronously fetch and render the carousels
+        this.renderCarousel('#trending-carousel', getTrendingMovies);
+        this.renderCarousel('#upcoming-carousel', getUpcomingMovies);
+    }
+
+    /**
+     * Fetches data using the provided API function and renders a carousel.
+     * @param {string} carouselId - The CSS selector for the carousel container.
+     * @param {Function} apiFunction - The function from api.js to call.
+     */
+    async renderCarousel(carouselId, apiFunction) {
+        const carousel = document.querySelector(carouselId);
+        const contentContainer = carousel.querySelector('.carousel-content');
+
+        try {
+            const data = await apiFunction();
+            const movies = data.results;
+
+            if (movies && movies.length > 0) {
+                const postersHTML = movies.map(movie => {
+                    if (!movie.poster_path) return '';
+                    return `
+                        <div class="poster-card" data-movie-id="${movie.id}">
+                            <img src="${getPosterUrl(movie.poster_path)}" alt="${movie.title}" loading="lazy">
+                        </div>
+                    `;
+                }).join('');
+                contentContainer.innerHTML = postersHTML;
+            } else {
+                contentContainer.innerHTML = `<p>No content available.</p>`;
+            }
+        } catch (error) {
+            console.error(`Failed to render carousel ${carouselId}:`, error);
+            contentContainer.innerHTML = `<p style="color: var(--color-subtle-text);">Could not load content.</p>`;
+        }
     }
 }
 
-// Make the HomeView class globally accessible so the router can find it.
 window.HomeView = HomeView;
 
 /**
- * Main App Initializer
- * This function sets up the event listeners and kicks off the application.
+ * Registers the service worker for PWA functionality.
  */
-function initialize() {
-    // Listen for hash changes to trigger navigation.
-    window.addEventListener('hashchange', () => router.navigate());
-    // Also navigate on initial page load.
-    window.addEventListener('load', ()' => router.navigate());
-
-    // Set the initial route if none is present in the URL.
-    if (!window.location.hash) {
-        window.location.hash = '#home';
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(registration => {
+                    console.log('Service Worker registered with scope:', registration.scope);
+                })
+                .catch(error => {
+                    console.error('Service Worker registration failed:', error);
+                });
+        });
     }
 }
 
-// Start the application once the DOM is fully loaded.
+/**
+ * Main App Initializer
+ */
+function initialize() {
+    registerServiceWorker(); // Register the service worker
+    
+    window.addEventListener('hashchange', () => router.navigate());
+    window.addEventListener('load', () => router.navigate());
+
+    if (!window.location.hash) {
+        window.location.hash = '#home';
+    } else {
+        router.navigate();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', initialize);
