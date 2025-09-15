@@ -1,32 +1,31 @@
 /*
 ================================================================
-STORAGE.JS - LOCALSTORAGE MANAGEMENT MODULE (REFACTORED)
-- Provides a clean, reliable, and well-documented interface for
-  interacting with the browser's localStorage.
-- Manages distinct keys for the local watchlist and Trakt tokens
-  to prevent data collisions.
-- Includes robust error handling for JSON parsing.
+STORAGE.JS - THE GRAND REBUILD
+- Vision: A stable and reliable interface for browser storage.
+- Architecture: Provides a safe, centralized API for all
+  localStorage GET/SET operations, with robust error handling.
 ================================================================
 */
 
-// --- Constants ---
-const WATCHLIST_KEY = 'pcinegpt_watchlist';
-const TRAKT_TOKEN_KEY = 'pcinegpt_trakt_tokens';
+// --- 1. CONFIGURATION ---
+const WATCHLIST_KEY = 'pcinegpt_watchlist_v2'; // Versioned key to prevent conflicts with old data
+const TRAKT_TOKEN_KEY = 'pcinegpt_trakt_tokens_v2';
 
-// --- Generic Helper Functions ---
+// --- 2. CORE UTILITY FUNCTIONS ---
 
 /**
  * Safely retrieves and parses a JSON item from localStorage.
+ * Includes error handling for corrupted data.
  * @param {string} key The key of the item to retrieve.
- * @returns {any|null} The parsed object, or null if not found or if parsing fails.
+ * @returns {any|null} The parsed object, or null if not found or parsing fails.
  */
 function getItem(key) {
     try {
         const itemJSON = localStorage.getItem(key);
         return itemJSON ? JSON.parse(itemJSON) : null;
     } catch (error) {
-        console.error(`Error parsing JSON from localStorage key "${key}":`, error);
-        // If parsing fails, it's safer to remove the corrupted data.
+        console.error(`Error parsing JSON from localStorage for key "${key}":`, error);
+        // If data is corrupted, it's safer to remove it.
         localStorage.removeItem(key);
         return null;
     }
@@ -46,11 +45,11 @@ function setItem(key, value) {
     }
 }
 
-// --- Watchlist Functions ---
+// --- 3. EXPORTED WATCHLIST METHODS ---
 
 /**
  * Retrieves the entire watchlist from localStorage.
- * @returns {Array<number>} An array of movie IDs, or an empty array if none exists.
+ * @returns {Array<number>} An array of movie IDs. Defaults to an empty array.
  */
 export function getWatchlist() {
     return getItem(WATCHLIST_KEY) || [];
@@ -73,24 +72,20 @@ export function addToWatchlist(movieId) {
  * @param {number} movieId The TMDB ID of the movie to remove.
  */
 export function removeFromWatchlist(movieId) {
-    let watchlist = getWatchlist();
-    if (watchlist.includes(movieId)) {
-        watchlist = watchlist.filter(id => id !== movieId);
-        setItem(WATCHLIST_KEY, watchlist);
-    }
+    const watchlist = getWatchlist().filter(id => id !== movieId);
+    setItem(WATCHLIST_KEY, watchlist);
 }
 
 /**
  * Checks if a specific movie ID is in the local watchlist.
  * @param {number} movieId The TMDB ID of the movie to check.
- * @returns {boolean} True if the movie is in the watchlist, false otherwise.
+ * @returns {boolean} True if the movie is in the watchlist.
  */
 export function isMovieInWatchlist(movieId) {
-    const watchlist = getWatchlist();
-    return watchlist.includes(movieId);
+    return getWatchlist().includes(movieId);
 }
 
-// --- Trakt Token Functions ---
+// --- 4. EXPORTED TRAKT TOKEN METHODS ---
 
 /**
  * Saves Trakt authentication tokens to localStorage.
