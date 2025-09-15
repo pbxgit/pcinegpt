@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- Primary Meta Tags -->
-    <title>pcinegpt - A Cinematic AI Navigator</title>
-    <meta name="description" content="A cinematic, AI-powered movie and show discovery platform with modern web design aesthetics, AI conversational features, and flawless functionality.">
+    <title>pcinegpt - Your Conversational Movie Navigator</title>
+    <meta name="description" content="An AI-powered movie and show discovery platform with a modern, conversational interface.">
     <link rel="icon" type="image/png" href="/icons/favicon.png">
 
     <!-- PWA & Mobile Meta Tags -->
-    <meta name="theme-color" content="#000000"/>
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F4F4F4">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="pcinegpt">
     <meta name="application-name" content="pcinegpt">
     <link rel="manifest" href="manifest.json">
@@ -21,13 +22,10 @@
     <!-- Stylesheets -->
     <link rel="stylesheet" href="main.css">
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Fonts: Clash Display (Headings) & Satoshi (Body) -->
+    <link href="https://api.fontshare.com/v2/css?f[]=clash-display@700,600,500&f[]=satoshi@700,500,400&display=swap" rel="stylesheet">
 
-    <!-- 3rd Party Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/colorthief@2.3.2/dist/color-thief.min.js"></script>
+    <!-- Icons & Libraries -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Main Application Logic -->
@@ -35,49 +33,26 @@
 </head>
 <body>
 
-    <!-- Dynamic Background Element -->
-    <div class="backdrop-container"></div>
-
     <!-- Header -->
     <header class="app-header">
         <div class="header-content">
-            <a href="/" class="logo" aria-label="pcinegpt Home">pcinegpt</a>
+            <a href="/" class="logo" aria-label="pcinegpt Home">
+                pcinegpt
+            </a>
             <div class="header-actions">
                 <a href="#stats" id="stats-nav-link" class="nav-link" style="display: none;">My Stats</a>
-                <button id="search-button" class="icon-button" aria-label="Open Search">
-                    <i data-lucide="search"></i>
-                </button>
                 <button id="trakt-auth-button" class="trakt-button">Connect Trakt</button>
+                <!-- Add a theme toggle button -->
+                <button id="theme-toggle-button" class="icon-button" aria-label="Toggle Theme">
+                    <i data-lucide="sun" class="theme-icon-sun"></i>
+                    <i data-lucide="moon" class="theme-icon-moon" style="display: none;"></i>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Main Content Area -->
+    <!-- Main Content Root -->
     <main id="app-root" class="app-main"></main>
-
-    <!-- Full-screen AI Search Overlay -->
-    <div id="search-overlay" class="search-overlay">
-        <button id="close-search-button" class="icon-button close-search" aria-label="Close Search">
-            <i data-lucide="x"></i>
-        </button>
-        <div class="search-modal">
-            <div class="search-input-wrapper">
-                <i data-lucide="search" class="search-icon"></i>
-                <input type="text" id="search-input" class="search-bar-overlay" placeholder="Ask for a movie, genre, actor, or mood...">
-                <div class="typing-indicator">
-                    <span></span><span></span><span></span>
-                </div>
-            </div>
-            <div id="search-suggestions" class="search-suggestions">
-                <p>Try searching for "sci-fi movies from the 90s" or "comedies to watch on a rainy day"</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="app-footer">
-        <p>&copy; 2025 pcinegpt — A Cinematic AI Navigator.</p>
-    </footer>
 
 </body>
 </html>
