@@ -1,36 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- ... (meta tags, title, etc. are unchanged) ... -->
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#121212"/><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="pcinegpt"><meta name="application-name" content="pcinegpt"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="/icons/icon-192x192.png"><title>pcinegpt</title><meta name="description" content="Navigating the Cinematic Universe with AI."><link rel="icon" type="image/png" href="/icons/favicon.png">
+    <!--
+    ================================================================
+    INDEX.HTML - THE APPLICATION SHELL (OVERHAULED)
+    - Serves as the single entry point for the SPA.
+    - Defines the core layout (header, main, footer).
+    - Loads all necessary CSS, fonts, and the main JavaScript module.
+    ================================================================
+    -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#101010">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="pcinegpt">
+    <meta name="application-name" content="pcinegpt">
+
+    <title>pcinegpt</title>
+    <meta name="description" content="Navigating the Cinematic Universe with AI.">
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <link rel="manifest" href="manifest.json">
 
     <!-- Stylesheets -->
     <link rel="stylesheet" href="main.css">
 
     <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- 3rd Party Libraries -->
+    <!-- ColorThief is used for dynamic theming on the detail pages -->
     <script src="https://cdn.jsdelivr.net/npm/colorthief@2.3.2/dist/color-thief.min.js"></script>
 
-    <!-- JavaScript -->
+    <!-- Main Application Logic (loaded as a module) -->
     <script src="app.js" type="module" defer></script>
 </head>
 <body>
     <header class="app-header">
         <div class="header-content">
-            <a href="/" class="logo" aria-label="pcinegpt Home">pcinegpt</a>
+            <a href="#" class="logo" aria-label="pcinegpt Home">pcinegpt</a>
             <nav class="main-nav">
-                <!-- This link is hidden by default and controlled by app.js -->
+                <!-- This link is hidden by default and shown by app.js when logged in -->
                 <a href="#stats" id="stats-nav-link" style="display: none;">My Stats</a>
             </nav>
             <div class="header-actions">
-                <input type="search" id="search-input" class="search-bar" placeholder="Ask me anything about movies...">
+                <input type="search" id="search-input" class="search-bar" placeholder="Ask anything about movies & shows...">
                 <button id="trakt-auth-button" class="trakt-button">Connect Trakt</button>
             </div>
         </div>
     </header>
 
+    <!-- The 'app-root' is where our SPA router will render all views -->
     <main id="app-root" class="app-main"></main>
 
     <footer class="app-footer">
