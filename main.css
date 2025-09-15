@@ -249,7 +249,7 @@ CAROUSEL & POSTERS
 .carousel-content:hover::-webkit-scrollbar-thumb { background-color: var(--color-primary); }
 
 .poster-card {
-    position: relative; /* Needed for positioning the favorite icon */
+    position: relative;
     flex: 0 0 auto;
     width: 185px;
     border-radius: var(--border-radius);
@@ -319,6 +319,51 @@ LOCAL WATCHLIST (FAVORITE ICON)
     0% { transform: scale(0.8); }
     70% { transform: scale(1.2); }
     100% { transform: scale(1); }
+}
+
+/*
+================================================================
+SEARCH VIEW
+- Styles for the AI search results page.
+================================================================
+*/
+.search-view h1 {
+    font-size: var(--font-size-xxl);
+    margin-bottom: var(--spacing-unit);
+}
+
+.search-view .query-display {
+    color: var(--color-primary);
+}
+
+.search-results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+    gap: calc(var(--spacing-unit) * 2.5);
+    margin-top: calc(var(--spacing-unit) * 4);
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: calc(var(--spacing-unit) * 10) 0;
+    gap: calc(var(--spacing-unit) * 2);
+    color: var(--color-subtle-text);
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid var(--color-surface);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 /*
