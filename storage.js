@@ -1,17 +1,15 @@
 /*
 ================================================================
-STORAGE.JS - LOCALSTORAGE MANAGEMENT MODULE
+STORAGE.JS - AWWWARDS REBUILD 2025
 - Provides a clean, safe, and centralized interface for interacting
   with the browser's localStorage.
-- Manages the local movie watchlist and Trakt.tv tokens.
-- Includes error handling for cases where localStorage might be
-  unavailable or full.
+- Manages Trakt.tv tokens and the user's preferred theme.
 ================================================================
 */
 
-// --- Define unique keys to prevent collisions ---
-const WATCHLIST_KEY = 'pcinegpt_watchlist_v1';
-const TRAKT_TOKEN_KEY = 'pcinegpt_trakt_tokens_v1';
+// --- Define unique keys for the new version to prevent conflicts ---
+const TRAKT_TOKEN_KEY = 'pcinegpt_trakt_tokens_v2';
+const THEME_KEY = 'pcinegpt_theme_v2';
 
 // --- Helper function for safe JSON parsing ---
 /**
@@ -31,69 +29,6 @@ function safeJsonParse(jsonString, defaultValue) {
 }
 
 // ================================================================
-// --- WATCHLIST FUNCTIONS ---
-// ================================================================
-
-/**
- * Retrieves the entire watchlist from localStorage.
- * @returns {Array<number>} An array of movie IDs. Returns an empty array on failure.
- */
-export function getWatchlist() {
-    const watchlistJSON = localStorage.getItem(WATCHLIST_KEY);
-    return safeJsonParse(watchlistJSON, []);
-}
-
-/**
- * Saves the entire watchlist array to localStorage.
- * @param {Array<number>} watchlist - The array of movie IDs to save.
- */
-function saveWatchlist(watchlist) {
-    try {
-        localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
-    } catch (error) {
-        console.error("Could not save watchlist to localStorage:", error);
-    }
-}
-
-/**
- * Adds a movie ID to the watchlist if it's not already present.
- * @param {number} movieId - The ID of the movie to add.
- */
-export function addToWatchlist(movieId) {
-    const watchlist = getWatchlist();
-    if (!watchlist.includes(movieId)) {
-        watchlist.push(movieId);
-        saveWatchlist(watchlist);
-    }
-}
-
-/**
- * Removes a movie ID from the watchlist.
- * @param {number} movieId - The ID of the movie to remove.
- */
-export function removeFromWatchlist(movieId) {
-    let watchlist = getWatchlist();
-    const initialLength = watchlist.length;
-    watchlist = watchlist.filter(id => id !== movieId);
-
-    // Only update localStorage if a change actually occurred
-    if (watchlist.length < initialLength) {
-        saveWatchlist(watchlist);
-    }
-}
-
-/**
- * Checks if a specific movie ID is in the watchlist.
- * @param {number} movieId - The ID of the movie to check.
- * @returns {boolean} True if the movie is in the watchlist, false otherwise.
- */
-export function isMovieInWatchlist(movieId) {
-    const watchlist = getWatchlist();
-    return watchlist.includes(movieId);
-}
-
-
-// ================================================================
 // --- TRAKT TOKEN FUNCTIONS ---
 // ================================================================
 
@@ -106,6 +41,7 @@ export function saveTraktTokens(tokens) {
         localStorage.setItem(TRAKT_TOKEN_KEY, JSON.stringify(tokens));
     } catch (error) {
         console.error("Could not save Trakt tokens to localStorage:", error);
+        // This could happen if storage is full.
     }
 }
 
@@ -123,4 +59,28 @@ export function getTraktTokens() {
  */
 export function clearTraktTokens() {
     localStorage.removeItem(TRAKT_TOKEN_KEY);
+}
+
+// ================================================================
+// --- THEME PREFERENCE FUNCTIONS ---
+// ================================================================
+
+/**
+ * Saves the user's selected theme ('light' or 'dark') to localStorage.
+ * @param {string} theme - The theme to save.
+ */
+export function saveTheme(theme) {
+    try {
+        localStorage.setItem(THEME_KEY, theme);
+    } catch (error) {
+        console.error("Could not save theme to localStorage:", error);
+    }
+}
+
+/**
+ * Retrieves the user's saved theme from localStorage.
+ * @returns {string | null} The saved theme string or null if not set.
+ */
+export function getTheme() {
+    return localStorage.getItem(THEME_KEY);
 }
