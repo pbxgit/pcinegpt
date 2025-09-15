@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#121212"/>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="pcinegpt">
+    <meta name="application-name" content="pcinegpt">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+
+    <!-- Page Info -->
+    <title>pcinegpt</title>
+    <meta name="description" content="Navigating the Cinematic Universe with AI.">
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="main.css">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- JavaScript - Deferred to not block rendering -->
+    <script src="app.js" type="module" defer></script>
+</head>
+<body>
+
+    <!--
+    ================================================================
+    HEADER
+    - Contains the main navigation, logo, and search bar.
+    - Designed to be a fixed element for persistent access.
+    ================================================================
+    -->
+    <header class="app-header">
+        <div class="header-content">
+            <a href="/" class="logo" aria-label="pcinegpt Home">pcinegpt</a>
+            <nav class="main-nav">
+                <!-- Navigation links will be dynamically handled by the router -->
+            </nav>
+            <div class="header-actions">
+                <input type="search" id="search-input" class="search-bar" placeholder="Ask me anything about movies...">
+                <button id="trakt-auth-button" class="trakt-button">Connect Trakt</button>
+            </div>
+        </div>
+    </header>
+
+    <!--
+    ================================================================
+    MAIN CONTENT CONTAINER
+    - This is the primary container where all dynamic views will
+      be rendered by the JavaScript router.
+    - It ensures a seamless SPA-like experience.
+    ================================================================
+    -->
+    <main id="app-root" class="app-main">
+        <!-- Views like 'Home', 'Detail', 'Search', 'My Stats' will be injected here -->
+    </main>
+
+    <!--
+    ================================================================
+    FOOTER
+    - A simple, clean footer containing project information.
+    ================================================================
+    -->
+    <footer class="app-footer">
+        <p>&copy; 2025 pcinegpt — A Personal Masterpiece.</p>
+    </footer>
+
+</body>
+</html>
