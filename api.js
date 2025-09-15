@@ -1,13 +1,14 @@
 /*
 ================================================================
-API.JS - AWWWARDS REBUILD 2025
+API.JS - AWWWARDS REBUILD 2025 (ENHANCED & ROBUST)
 - Unified TMDB API interaction module for both movies and TV shows.
-- Manages API key and base URLs with robust error handling.
+- Manages API key and base URLs with more descriptive error handling.
+- Provides improved fallback assets for a better user experience.
 ================================================================
 */
 
 // --- Configuration ---
-const API_KEY = '5bd8970deaa0e82346fc042a97499a59';
+const API_KEY = '5bd8970deaa0e82346fc042a97499a59'; // Your TMDB API Key
 const API_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 
@@ -18,7 +19,7 @@ const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
  * @param {string} endpoint - The TMDB endpoint (e.g., '/movie/popular').
  * @param {string} [queryParams=''] - Optional query parameters.
  * @returns {Promise<object>} A promise that resolves to the JSON response data.
- * @throws {Error} If the network response is not ok.
+ * @throws {Error} If the network response is not ok or a network error occurs.
  */
 async function fetchFromTMDB(endpoint, queryParams = '') {
     const url = `${API_BASE_URL}${endpoint}?api_key=${API_KEY}&language=en-US${queryParams}`;
@@ -26,12 +27,14 @@ async function fetchFromTMDB(endpoint, queryParams = '') {
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`HTTP error! Status: ${response.status} - ${errorData.status_message || 'Unknown error'}`);
+            const errorData = await response.json().catch(() => ({ status_message: 'Unknown API error' }));
+            // Provide a more informative error message
+            throw new Error(`TMDB API Error: ${response.status} - ${errorData.status_message} for endpoint ${endpoint}`);
         }
         return await response.json();
     } catch (error) {
         console.error(`Error fetching from TMDB endpoint ${endpoint}:`, error);
+        // Re-throw the error to be handled by the calling function
         throw error;
     }
 }
@@ -40,26 +43,26 @@ async function fetchFromTMDB(endpoint, queryParams = '') {
 
 /**
  * Fetches trending media for the week.
- * @param {string} type - The media type ('movie' or 'tv').
+ * @param {string} type - The media type ('movie' or 'tv'). Defaults to 'movie'.
  * @returns {Promise<Array<object>>} A promise resolving to an array of media items.
  */
 export async function getTrending(type = 'movie') {
     const data = await fetchFromTMDB(`/trending/${type}/week`);
-    return data.results;
+    return data.results || [];
 }
 
 /**
  * Fetches top-rated media.
- * @param {string} type - The media type ('movie' or 'tv').
+ * @param {string} type - The media type ('movie' or 'tv'). Defaults to 'movie'.
  * @returns {Promise<Array<object>>} A promise resolving to an array of media items.
  */
 export async function getTopRated(type = 'movie') {
     const data = await fetchFromTMDB(`/${type}/top_rated`);
-    return data.results;
+    return data.results || [];
 }
 
 /**
- * Fetches the full details for a specific movie or TV show.
+ * Fetches the full details for a specific movie or TV show, including videos and cast.
  * @param {string} type - The media type ('movie' or 'tv').
  * @param {number} id - The TMDB ID of the media.
  * @returns {Promise<object>} A promise resolving to the media details object.
@@ -71,10 +74,11 @@ export function getMediaDetails(type, id) {
 
 /**
  * Searches for a movie or TV show on TMDB based on its title and year.
+ * This is crucial for matching results from the Gemini API.
  * @param {string} type - The media type ('movie' or 'tv').
  * @param {string} title - The title of the content.
  * @param {string} year - The release year of the content.
- * @returns {Promise<object|null>} The first search result, or null if no match is found.
+ * @returns {Promise<object|null>} The first and most likely search result, or null if no match is found.
  */
 export async function searchTMDB(type, title, year) {
     const endpoint = `/search/${type}`;
@@ -82,24 +86,26 @@ export async function searchTMDB(type, title, year) {
     const queryParams = `&query=${encodeURIComponent(title)}&${yearParam}=${year}`;
     try {
         const data = await fetchFromTMDB(endpoint, queryParams);
+        // Return the first result if it exists, otherwise null
         return data.results && data.results.length > 0 ? data.results[0] : null;
     } catch (error) {
         console.error(`Failed to search for ${title} (${year}):`, error);
-        return null;
+        return null; // Return null on error to prevent crashing the recommendation flow
     }
 }
 
 /**
  * Constructs a full URL for a TMDB poster or backdrop image.
- * Provides a fallback placeholder image if the path is missing.
+ * Provides a more visually appealing fallback placeholder if the image path is missing.
  * @param {string|null} imagePath - The path from the TMDB API (e.g., '/xxxxx.jpg').
  * @param {string} [size='w500'] - The desired image size (e.g., 'w500', 'w780', 'original').
  * @returns {string} The complete, absolute URL to the image.
  */
 export function getPosterUrl(imagePath, size = 'w500') {
     if (!imagePath) {
-        // A neutral placeholder that works with both light and dark themes.
-        return `https://via.placeholder.com/500x750/CCCCCC/FFFFFF?text=No+Image`;
+        // A more aesthetically pleasing and informative placeholder
+        const dimensions = size === 'w780' ? '780x1170' : '500x750';
+        return `https://via.placeholder.com/${dimensions}/151515/5a5a5a?text=Image+Not+Available`;
     }
     return `${IMAGE_BASE_URL}${size}${imagePath}`;
 }
