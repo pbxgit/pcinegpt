@@ -3,15 +3,14 @@
 <head>
     <!--
     ================================================================
-    INDEX.HTML - AWWWARDS-LEVEL APPLICATION SHELL (OVERHAULED)
-    - Rebuilt to support a cinematic, animation-rich user experience.
-    - Defines a clean, semantic structure for the new visual design.
-    - Integrates the new stylesheet and application logic.
+    INDEX.HTML - BUG-FIX & POLISH PASS
+    - Adds the required structure for the mobile search overlay.
+    - Includes an SVG icon for the mobile search button.
     ================================================================
     -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#18181A">
+    <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="pcinegpt">
@@ -23,47 +22,46 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
     <link rel="manifest" href="manifest.json">
 
-    <!-- Stylesheets -->
+    <!-- Stylesheets & Fonts -->
     <link rel="stylesheet" href="main.css">
-
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <!-- 3rd Party Libraries -->
-    <!-- ColorThief is used for dynamic theming on the detail pages -->
     <script src="https://cdn.jsdelivr.net/npm/colorthief@2.3.2/dist/color-thief.min.js"></script>
 
-    <!-- Main Application Logic (loaded as a module) -->
+    <!-- Main Application Logic -->
     <script src="app.js" type="module" defer></script>
 </head>
-<body class="loading"> <!-- Start with loading class to prevent FOUC -->
-    
-    <!-- Optional: Custom Cursor Elements -->
-    <div class="cursor-dot"></div>
-    <div class="cursor-outline"></div>
+<body class="loading">
 
     <header class="app-header">
         <div class="header-content">
             <a href="#" class="logo" aria-label="pcinegpt Home">pcinegpt</a>
-            <nav class="main-nav">
-                <!-- Navigation links will be managed by app.js -->
-                <a href="#stats" id="stats-nav-link" style="display: none;">My Stats</a>
-            </nav>
             <div class="header-actions">
-                <input type="search" id="search-input" class="neumorphic-input" placeholder="Search movies, shows...">
+                <input type="search" id="search-input" class="search-input" placeholder="Search movies, shows...">
+                <button id="search-icon-btn" class="search-icon-btn" aria-label="Open search">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+                </button>
                 <button id="trakt-auth-button" class="primary-button">Connect Trakt</button>
             </div>
         </div>
     </header>
 
-    <!-- The 'app-root' is where our SPA router will render all views -->
     <main id="app-root" class="app-main"></main>
 
     <footer class="app-footer">
-        <p>&copy; 2025 pcinegpt — A Personal Masterpiece Reimagined.</p>
+        <p>&copy; 2025 pcinegpt — A Personal Masterpiece Polished.</p>
     </footer>
-    
+
+    <!-- Mobile Search Overlay -->
+    <div id="search-overlay" class="search-overlay">
+        <button id="search-overlay-close" class="search-overlay-close" aria-label="Close search">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+        <input type="search" id="search-overlay-input" class="search-overlay-input" placeholder="Ask anything about movies & shows...">
+    </div>
+
 </body>
 </html>
