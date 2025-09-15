@@ -4,8 +4,8 @@
     "description": "Navigating the Cinematic Universe with AI.",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#121212",
-    "theme_color": "#121212",
+    "background_color": "#101010",
+    "theme_color": "#101010",
     "orientation": "portrait-primary",
     "icons": [
         {
