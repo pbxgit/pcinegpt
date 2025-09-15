@@ -1,6 +1,6 @@
 /*
 ================================================================
-APP.JS - AWWWARDS REBUILD 2025 (Corrected Version)
+APP.JS - AWWWARDS REBUILD 2025 (Final Corrected Version)
 - Core application logic for the new conversational experience.
 - Manages theme, state, routing, and dynamic view rendering.
 ================================================================
@@ -76,13 +76,16 @@ const routes = {
 };
 
 async function router() {
-    dom.root.innerHTML = '';
-    showLoading();
-
     const hash = window.location.hash.substring(1) || '/';
     const [path, param] = hash.split(/(?<=^\/[a-zA-Z]+)\/(.*)/s).filter(Boolean);
     
     state.currentRoute = path || '/';
+
+    // Do not render anything if the root element is missing
+    if (!dom.root) return;
+
+    dom.root.innerHTML = '';
+    showLoading();
 
     const routeHandlerName = routes[path] || routes['/'];
     const handler = viewHandlers[routeHandlerName];
@@ -133,11 +136,13 @@ const viewHandlers = {
         const recommendationsText = await gemini.getAIRecommendations({ searchQuery: decodedQuery });
         const results = await parseAndFetchGeminiResults(recommendationsText);
         
-        if (results.length > 0) {
-            document.querySelector('.search-view').insertAdjacentHTML('beforeend', createCarousel('AI Recommendations', results));
-        } else {
-            renderError('The AI could not find any results.', document.querySelector('.search-view'));
-            document.querySelector('.search-title').style.display = 'none';
+        const searchView = document.querySelector('.search-view');
+        if (searchView && results.length > 0) {
+            searchView.insertAdjacentHTML('beforeend', createCarousel('AI Recommendations', results));
+        } else if (searchView) {
+            renderError('The AI could not find any results.', searchView);
+            const title = searchView.querySelector('.search-title');
+            if (title) title.style.display = 'none';
         }
     },
     async renderStatsView() {
@@ -167,7 +172,9 @@ function render(html, options = {}) {
 }
 
 function renderError(message, target = dom.root) {
-    target.innerHTML = `<div class="error-view" style="text-align: center; padding: 2rem;"><p>${message}</p></div>`;
+    if (target) {
+        target.innerHTML = `<div class="error-view" style="text-align: center; padding: 2rem;"><p>${message}</p></div>`;
+    }
 }
 
 // ================================================================
@@ -197,7 +204,10 @@ async function loadDiscoveryCarousels() {
                 carouselEl.className = 'carousel-container';
                 carouselEl.style.animationDelay = `${i * 150}ms`;
                 carouselEl.innerHTML = createCarousel(title, data, type);
-                carouselContainer.appendChild(carouselEl);
+                // Final check before appending
+                if (document.querySelector('.carousel-master-container')) {
+                    document.querySelector('.carousel-master-container').appendChild(carouselEl);
+                }
             }
         } catch (error) { console.error(`Failed to load carousel "${carouselsToLoad[i].title}":`, error); }
     }
@@ -271,7 +281,7 @@ async function handleWatchlistClick(e) {
 }
 
 function showLoading() {
-    dom.root.innerHTML = `<div class="loading-container"><div class="spinner"></div></div>`;
+    if (dom.root) dom.root.innerHTML = `<div class="loading-container"><div class="spinner"></div></div>`;
 }
 
 function updateAuthUI() {
@@ -284,15 +294,14 @@ async function handleAuthCallback() {
     const urlParams = new URLSearchParams(window.location.search);
     const authCode = urlParams.get('code');
     if (authCode) {
-        window.history.replaceState({}, document.title, window.location.pathname); // Clean URL immediately
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showLoading();
         await trakt.handleTraktCallback(authCode);
-        return true;
     }
-    return false;
 }
 
 async function fetchTraktWatchlist() {
-    if (state.isTraktAuthenticated) {
+    if (storage.getTraktTokens()) {
         try { state.traktWatchlist = await trakt.getWatchlist(); }
         catch (error) { console.error("Could not fetch Trakt watchlist:", error); state.traktWatchlist = []; }
     }
@@ -305,15 +314,24 @@ function initEventListeners() {
     dom.root.addEventListener('click', handleWatchlistClick);
 }
 
+// CRITICAL BUG FIX: Simplified, robust initialization sequence.
 async function init() {
     try {
-        if (window.lucide) lucide.createIcons();
-        initTheme();
+        // Run event listeners and theme first, as they have no dependencies.
         initEventListeners();
-        const authHandled = await handleAuthCallback();
+        initTheme();
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+
+        // Handle any authentication callbacks from Trakt.
+        await handleAuthCallback();
+        
+        // Update the UI and fetch user data based on the authentication state.
         updateAuthUI();
         await fetchTraktWatchlist();
-        // BUG FIX: Simplified logic. Always run the router. handleAuthCallback cleaned the URL.
+        
+        // Finally, run the router to render the correct initial view.
         router();
     } catch (error) {
         console.error("A critical error occurred during app initialization:", error);
@@ -322,4 +340,4 @@ async function init() {
 }
 
 // Start the application
-init();
+document.addEventListener('DOMContentLoaded', init);
