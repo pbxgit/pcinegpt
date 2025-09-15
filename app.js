@@ -1,311 +1,383 @@
 /*
 ================================================================
-APP.JS - THE GRAND REBUILD (FROM SCRATCH)
-- Vision: A stable, performant, and feature-rich SPA orchestrator.
-- Architecture: Built on a predictable lifecycle and atomic rendering
-  pattern to eliminate all previous race condition bugs.
-- Features: Powers the Awwwards-level animations, interactions,
-  and human-centric UX defined in the new design system.
+APP.JS - CORE APPLICATION LOGIC
+- SPA Router: Handles navigation and view rendering.
+- State Management: Manages the application's state.
+- Rendering Lifecycle: Controls how and when components are rendered.
+- Event Handling: Centralizes all user interaction logic.
 ================================================================
 */
 
-// --- 1. MODULE IMPORTS ---
-import * as TMDB_API from './api.js';
-import * as GEMINI_API from './gemini.js';
-import * as TRAKT_API from './trakt.js';
-import * as STORAGE from './storage.js';
+// --- MODULE IMPORTS ---
+import * as api from './api.js';
+import * as gemini from './gemini.js';
+import * as trakt from './trakt.js';
+import * as storage from './storage.js';
 
-// --- 2. DOM ELEMENT CACHE (populated by main function) ---
-let body, appRoot, header, searchInput, traktAuthButton, searchIconBtn,
-    searchOverlay, searchOverlayInput, searchOverlayClose;
+// --- DOM ELEMENT SELECTORS ---
+const dom = {
+    root: document.getElementById('app-root'),
+    header: document.querySelector('.app-header'),
+    backdrop: document.querySelector('.backdrop-container'),
+    search: {
+        overlay: document.getElementById('search-overlay'),
+        openBtn: document.getElementById('search-button'),
+        closeBtn: document.getElementById('close-search-button'),
+        input: document.getElementById('search-input'),
+    },
+    trakt: {
+        authBtn: document.getElementById('trakt-auth-button'),
+        statsLink: document.getElementById('stats-nav-link'),
+    }
+};
 
-// --- 3. APPLICATION STATE ---
+// --- APPLICATION STATE ---
 const state = {
     isTraktAuthenticated: false,
+    currentBackdrop: null,
 };
 
-// --- 4. INTERACTION & ANIMATION MODULES ---
-const scrollAnimator = {
-    observer: null,
-    init() {
-        if ('IntersectionObserver' in window) {
-            this.observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.classList.add('is-visible');
-                        this.observer.unobserve(entry.target);
-                    }
-                });
-            }, { threshold: 0.1 });
-        }
-    },
-    observe(container = document) {
-        if (!this.observer) return;
-        container.querySelectorAll('.reveal-on-scroll').forEach(el => this.observer.observe(el));
-    }
-};
-
-const interactiveCarousel = {
-    init(container = document) {
-        container.querySelectorAll('.carousel-content').forEach(carousel => {
-            let isDown = false, startX, scrollLeft;
-            const start = (e) => { isDown = true; startX = (e.pageX || e.touches[0].pageX) - carousel.offsetLeft; scrollLeft = carousel.scrollLeft; };
-            const end = () => { isDown = false; };
-            const move = (e) => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = (e.pageX || e.touches[0].pageX) - carousel.offsetLeft;
-                const walk = (x - startX) * 2;
-                carousel.scrollLeft = scrollLeft - walk;
-            };
-            carousel.addEventListener('mousedown', start);
-            carousel.addEventListener('touchstart', start, { passive: true });
-            carousel.addEventListener('mouseleave', end);
-            carousel.addEventListener('mouseup', end);
-            carousel.addEventListener('touchend', end);
-            carousel.addEventListener('mousemove', move);
-            carousel.addEventListener('touchmove', move, { passive: true });
-        });
-    }
-};
-
-const lazyLoader = {
-    observer: null,
-    init() {
-        if ('IntersectionObserver' in window) {
-            this.observer = new IntersectionObserver((entries, observer) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const image = entry.target;
-                        image.src = image.dataset.src;
-                        image.classList.remove('lazy');
-                        image.classList.add('loaded');
-                        observer.unobserve(image);
-                    }
-                });
-            });
-        }
-    },
-    observe(container = document) {
-        if (!this.observer) return;
-        container.querySelectorAll('img.lazy').forEach(img => this.observer.observe(img));
-    }
-};
-
-// --- 5. UI COMPONENT RENDERERS ---
-const UI = {
-    loadingSkeletons: (count = 8) => `<div class="skeleton-grid">${`<div class="skeleton-card"></div>`.repeat(count)}</div>`,
-    error: (message = 'An unknown error occurred.') => `<div class="hero-section"><h1>Oops.</h1><p>${message}</p></div>`,
-    posterCard: (item) => {
-        if (!item || !item.id || !item.poster_path) return '';
-        const imageUrl = TMDB_API.getImageUrl(item.poster_path, 'w500');
-        return `<div class="poster-card reveal-on-scroll"><a href="#movie/${item.id}"><img data-src="${imageUrl}" alt="${item.title || item.name}" class="lazy"></a></div>`;
-    },
-    carousel: (title, items) => {
-        if (!items || items.length === 0) return '';
-        return `<section class="carousel reveal-on-scroll"><h2>${title}</h2><div class="carousel-content">${items.map(UI.posterCard).join('')}</div></section>`;
-    }
-};
-
-// --- 6. VIEW RENDERERS (ATOMIC PATTERN) ---
-async function renderHomeView() {
-    let viewHTML;
-    try {
-        const [trending, upcoming] = await Promise.all([TMDB_API.getTrendingMovies(), TMDB_API.getUpcomingMovies()]);
-        const carouselsHTML = `${UI.carousel('Trending This Week', trending.results)}${UI.carousel('Coming Soon', upcoming.results)}`;
-        viewHTML = `<div class="hero-section reveal-on-scroll"><h1>Discover Your Next Obsession.</h1><p>AI-powered recommendations for movies and shows, tailored to your unique taste.</p></div>${carouselsHTML}`;
-    } catch (error) {
-        console.error('Error fetching homepage content:', error);
-        viewHTML = UI.error('Could not load the cinematic universe.');
-    }
-    appRoot.innerHTML = `<div class="view home-view">${viewHTML}</div>`;
-}
-
-async function renderSearchView(query) {
-    let viewHTML;
-    try {
-        const { type } = await GEMINI_API.analyzeQuery(query);
-        const recommendationsText = await GEMINI_API.getAIRecommendations({ searchQuery: query, type });
-        const aiResults = GEMINI_API.parseAIResponse(recommendationsText);
-        if (aiResults.length === 0) throw new Error("The AI returned no recommendations. Try a different query!");
-        
-        const tmdbDataPromises = aiResults.map(result => TMDB_API.findTMDBEntry(result.type, result.title, result.year));
-        const tmdbResults = (await Promise.all(tmdbDataPromises)).filter(Boolean);
-        if (tmdbResults.length === 0) throw new Error("AI recommendations found, but could not match them to our database.");
-
-        viewHTML = `<div class="hero-section reveal-on-scroll"><p>Results for</p><h1>“${query}”</h1></div><div class="skeleton-grid">${tmdbResults.map(UI.posterCard).join('')}</div>`;
-    } catch (error) {
-        console.error('Error during AI search:', error);
-        viewHTML = `<div class="hero-section"><p>Results for</p><h1>“${query}”</h1></div>${UI.error(error.message)}`;
-    }
-    appRoot.innerHTML = `<div class="view search-view">${viewHTML}</div>`;
-}
-
-async function renderDetailView(movieId) {
-    try {
-        const movie = await TMDB_API.getMovieDetails(movieId);
-        const isInWatchlist = STORAGE.isMovieInWatchlist(movie.id);
-        const backdropUrl = TMDB_API.getImageUrl(movie.backdrop_path, 'original');
-
-        const viewHTML = `
-            <section class="detail-hero">
-                <img src="${backdropUrl}" class="backdrop-image" alt="">
-                <div class="backdrop-overlay"></div>
-                <div class="detail-hero-content reveal-on-scroll">
-                    <h1>${movie.title}</h1>
-                </div>
-            </section>
-            <section class="detail-body">
-                <div class="detail-poster reveal-on-scroll">
-                    <img src="${TMDB_API.getImageUrl(movie.poster_path, 'w500')}" alt="${movie.title}">
-                </div>
-                <div class="detail-info reveal-on-scroll">
-                    <h2>Overview</h2>
-                    <p>${movie.overview || 'No overview available.'}</p>
-                    <button class="primary-button ${isInWatchlist ? 'in-watchlist' : ''}" data-action="toggle-watchlist" data-movie-id="${movie.id}">
-                        ${isInWatchlist ? 'In Watchlist' : 'Add to Watchlist'}
-                    </button>
-                </div>
-            </section>
-            <div id="similar-movies-container"></div>`;
-        appRoot.innerHTML = `<div class="view detail-view">${viewHTML}</div>`;
-        renderSimilarMovies(movieId, 'similar-movies-container');
-    } catch (error) {
-        console.error('Error rendering detail view:', error);
-        appRoot.innerHTML = `<div class="view detail-view">${UI.error('Could not load movie details.')}</div>`;
-    }
-}
-
-async function renderSimilarMovies(movieId, containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    try {
-        const similar = await TMDB_API.getSimilarMovies(movieId);
-        if (similar.results && similar.results.length > 0) {
-            container.innerHTML = UI.carousel('You Might Also Like', similar.results.slice(0, 10));
-            // Re-initialize interactions for this new content
-            lazyLoader.observe(container);
-            scrollAnimator.observe(container);
-            interactiveCarousel.init(container);
-        }
-    } catch (error) { console.warn('Could not fetch similar movies:', error); }
-}
-
-// --- 7. EVENT HANDLERS & ROUTER ---
-function handleAppClick(event) {
-    const action = event.target.dataset.action;
-    if (action === 'toggle-watchlist') {
-        const button = event.target;
-        const movieId = Number(button.dataset.movieId);
-        if (!movieId) return;
-        const isInWatchlist = STORAGE.isMovieInWatchlist(movieId);
-        if (isInWatchlist) {
-            STORAGE.removeFromWatchlist(movieId);
-            button.textContent = 'Add to Watchlist';
-            button.classList.remove('in-watchlist');
-        } else {
-            STORAGE.addToWatchlist(movieId);
-            button.textContent = 'In Watchlist';
-            button.classList.add('in-watchlist');
-        }
-    }
-}
-
-function handleSearch(query) {
-    if (query) {
-        window.location.hash = `search/${encodeURIComponent(query)}`;
-        toggleSearchOverlay(false);
-    }
-}
-
-function toggleSearchOverlay(show) {
-    searchOverlay.classList.toggle('visible', show);
-    if (show) searchOverlayInput.focus();
-    else searchOverlayInput.value = '';
-}
-
-function updateUIForAuthState() {
-    state.isTraktAuthenticated = !!STORAGE.getTraktTokens();
-    if (state.isTraktAuthenticated) {
-        traktAuthButton.textContent = 'Logout Trakt';
-        traktAuthButton.onclick = TRAKT_API.logoutTrakt;
-    } else {
-        traktAuthButton.textContent = 'Connect Trakt';
-        traktAuthButton.onclick = TRAKT_API.redirectToTraktAuth;
-    }
-}
+// ================================================================
+// --- ROUTING & NAVIGATION ---
+// ================================================================
 
 const routes = {
-    '': renderHomeView,
-    'search/:query': renderSearchView,
-    'movie/:id': renderDetailView,
+    '/': 'renderHomeView',
+    '/movie/:id': 'renderDetailView',
+    '/search/:query': 'renderSearchView',
+    '/stats': 'renderStatsView',
 };
 
 async function router() {
-    try {
-        const hash = window.location.hash.substring(1);
-        const [path, param] = hash.split('/');
-        const renderFunc = routes[path] || routes[''];
+    const hash = window.location.hash.substring(1) || '/';
+    const [path, param] = hash.split(/(?<=^\/[a-zA-Z]+)\/(.*)/s).filter(Boolean);
 
-        appRoot.classList.add('view-exit');
-        await new Promise(resolve => setTimeout(resolve, 300));
-        appRoot.innerHTML = `<div class="view">${UI.loadingSkeletons()}</div>`;
-        appRoot.classList.remove('view-exit');
+    const routeHandlerName = routes[path] || routes['/'];
+    const handler = viewHandlers[routeHandlerName];
 
-        await renderFunc(decodeURIComponent(param || ''));
-
-        window.scrollTo(0, 0);
-        // Initialize animations and interactions for the new view
-        lazyLoader.observe();
-        scrollAnimator.observe();
-        interactiveCarousel.init();
-    } catch (error) {
-        console.error("A critical error occurred in the router:", error);
-        appRoot.innerHTML = UI.error("The application encountered a serious error.");
+    if (handler) {
+        showLoading();
+        await handler(param); // Pass the ID or query to the handler
     }
 }
 
-// --- 8. MAIN APPLICATION INITIALIZATION ---
-async function main() {
-    // 1. Cache all critical DOM elements
-    body = document.body;
-    appRoot = document.getElementById('app-root');
-    header = document.querySelector('.app-header');
-    searchInput = document.getElementById('search-input');
-    traktAuthButton = document.getElementById('trakt-auth-button');
-    searchIconBtn = document.getElementById('search-icon-btn');
-    searchOverlay = document.getElementById('search-overlay');
-    searchOverlayInput = document.getElementById('search-overlay-input');
-    searchOverlayClose = document.getElementById('search-overlay-close');
+// ================================================================
+// --- VIEW RENDERING LOGIC ---
+// ================================================================
 
-    // 2. Setup all static event listeners
+const viewHandlers = {
+    async renderHomeView() {
+        updateBackdrop(); // Clear backdrop for home
+        const [trending, upcoming] = await Promise.all([
+            api.getTrendingMovies(),
+            api.getUpcomingMovies(),
+        ]);
+
+        const heroMovie = trending.results[0];
+        updateBackdrop(api.getPosterUrl(heroMovie.backdrop_path, 'original'));
+
+        let html = `
+            <div class="view">
+                <section class="hero-section">
+                    <h1>${heroMovie.title}</h1>
+                    <p class="tagline">${heroMovie.overview}</p>
+                </section>
+                ${createCarousel('Trending This Week', trending.results)}
+                ${createCarousel('Coming Soon', upcoming.results)}
+            </div>
+        `;
+        render(html);
+    },
+
+    async renderDetailView(id) {
+        const movie = await api.getMovieDetails(id);
+        updateBackdrop(api.getPosterUrl(movie.backdrop_path, 'original'));
+        updateThemeColor(api.getPosterUrl(movie.poster_path));
+
+        const releaseYear = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
+        const runtime = movie.runtime ? `${movie.runtime} min` : 'N/A';
+        const rating = movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A';
+
+        let html = `
+            <div class="view detail-view-container">
+                <div class="detail-content">
+                    <header class="detail-header">
+                        <div class="detail-poster">
+                            <img src="${api.getPosterUrl(movie.poster_path)}" alt="${movie.title}">
+                        </div>
+                        <div class="detail-title">
+                            <h1>${movie.title}</h1>
+                            <p>${movie.tagline || ''}</p>
+                            <div class="detail-meta">
+                                <span>${releaseYear}</span>
+                                <span>${runtime}</span>
+                                <span><i data-lucide="star" style="width: 16px; display: inline-block; margin-right: 4px;"></i>${rating}</span>
+                            </div>
+                        </div>
+                    </header>
+                    <section class="detail-body">
+                        <h2>Synopsis</h2>
+                        <p>${movie.overview}</p>
+                    </section>
+                </div>
+            </div>
+        `;
+        render(html);
+    },
+
+    async renderSearchView(query) {
+        updateBackdrop();
+        const decodedQuery = decodeURIComponent(query);
+        render(`<div class="view search-view"><h1>Results for: <span class="query-display">${decodedQuery}</span></h1><div class="search-results-grid"></div></div>`);
+        
+        // Use Gemini to get a list of movie titles
+        const recommendationsText = await gemini.getAIRecommendations({ searchQuery: decodedQuery, type: 'movie' });
+        const recommendationLines = recommendationsText.trim().split('\n');
+
+        const searchGrid = document.querySelector('.search-results-grid');
+        
+        // Fetch details for each title from TMDB
+        const moviePromises = recommendationLines.map(line => {
+            const [, title, year] = line.split('|');
+            return api.searchTMDB('movie', title, year);
+        });
+
+        const movieResults = await Promise.all(moviePromises);
+        const validMovies = movieResults.filter(Boolean); // Filter out null results
+
+        if (validMovies.length > 0) {
+            searchGrid.innerHTML = validMovies.map(createPosterCard).join('');
+            lucide.createIcons(); // Re-initialize icons
+        } else {
+            searchGrid.innerHTML = `<p>No results found. Try a different query.</p>`;
+        }
+    },
+
+    async renderStatsView() {
+        if (!state.isTraktAuthenticated) {
+            render(`
+                <div class="view stats-prompt">
+                    <h2>Unlock Your Personal Stats</h2>
+                    <p>Connect your Trakt.tv account to see detailed statistics about your viewing habits.</p>
+                    <button class="trakt-button" id="prompt-trakt-connect">Connect Trakt</button>
+                </div>
+            `);
+            document.getElementById('prompt-trakt-connect').addEventListener('click', trakt.redirectToTraktAuth);
+            return;
+        }
+
+        const stats = await trakt.getUserStats();
+        const { movies, shows, episodes } = stats;
+
+        let html = `
+            <div class="view">
+                <h1>My Stats</h1>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h2>Total Movies Watched</h2>
+                        <div class="stat-highlight">${movies.watched.toLocaleString()}</div>
+                        <div class="stat-label">Movies</div>
+                    </div>
+                    <div class="stat-card">
+                        <h2>Total Shows Watched</h2>
+                        <div class="stat-highlight">${shows.watched.toLocaleString()}</div>
+                        <div class="stat-label">Shows</div>
+                    </div>
+                    <div class="stat-card">
+                        <h2>Total Episodes Watched</h2>
+                        <div class="stat-highlight">${episodes.watched.toLocaleString()}</div>
+                        <div class="stat-label">Episodes</div>
+                    </div>
+                     <div class="stat-card">
+                        <h2>Total Time Wasted</h2>
+                        <div class="stat-highlight">${(movies.minutes / 60 / 24 + episodes.minutes / 60 / 24).toFixed(0)}</div>
+                        <div class="stat-label">Days</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        render(html);
+    }
+};
+
+function render(html) {
+    dom.root.innerHTML = html;
+    lucide.createIcons();
+}
+
+// ================================================================
+// --- COMPONENT FACTORIES ---
+// ================================================================
+
+function createCarousel(title, movies) {
+    if (!movies || movies.length === 0) return '';
+    return `
+        <section class="carousel">
+            <h2>${title}</h2>
+            <div class="carousel-content">
+                ${movies.map(createPosterCard).join('')}
+            </div>
+        </section>
+    `;
+}
+
+function createPosterCard(movie) {
+    const isInWatchlist = storage.isMovieInWatchlist(movie.id);
+    return `
+        <div class="poster-card" data-movie-id="${movie.id}">
+            <a href="#/movie/${movie.id}">
+                <img class="lazy" data-src="${api.getPosterUrl(movie.poster_path)}" alt="${movie.title}">
+            </a>
+            <div class="watchlist-icon ${isInWatchlist ? 'active' : ''}" aria-label="Toggle Watchlist">
+                <i data-lucide="bookmark"></i>
+            </div>
+        </div>
+    `;
+}
+
+// ================================================================
+// --- UI & EVENT HANDLERS ---
+// ================================================================
+
+function initEventListeners() {
     window.addEventListener('hashchange', router);
-    window.addEventListener('scroll', () => header.classList.toggle('scrolled', window.scrollY > 50), { passive: true });
-    appRoot.addEventListener('click', handleAppClick);
-    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleSearch(e.target.value.trim()); });
-    searchIconBtn.addEventListener('click', () => toggleSearchOverlay(true));
-    searchOverlayClose.addEventListener('click', () => toggleSearchOverlay(false));
-    searchOverlayInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleSearch(e.target.value.trim()); });
+    window.addEventListener('DOMContentLoaded', router);
 
-    // 3. Initialize animation modules
-    scrollAnimator.init();
-    lazyLoader.init();
+    // Search Overlay
+    dom.search.openBtn.addEventListener('click', () => dom.search.overlay.classList.add('visible'));
+    dom.search.closeBtn.addEventListener('click', () => dom.search.overlay.classList.remove('visible'));
+    dom.search.input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && dom.search.input.value.trim()) {
+            window.location.hash = `#/search/${encodeURIComponent(dom.search.input.value.trim())}`;
+            dom.search.input.value = '';
+            dom.search.overlay.classList.remove('visible');
+        }
+    });
 
-    // 4. Handle initial state (e.g., Trakt auth callback)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('code')) {
-        appRoot.innerHTML = `<div class="view">${UI.loadingSkeletons()}</div>`;
-        await TRAKT_API.handleTraktCallback(urlParams.get('code'));
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-    updateUIForAuthState();
+    // Trakt Auth
+    dom.trakt.authBtn.addEventListener('click', () => {
+        if (state.isTraktAuthenticated) {
+            trakt.logoutTrakt();
+        } else {
+            trakt.redirectToTraktAuth();
+        }
+    });
 
-    // 5. Run the initial route to render the first view
-    await router();
-
-    // 6. Remove loading class to show the fully rendered app
-    body.classList.remove('loading');
+    // Event Delegation for Watchlist icons and Lazy Loading
+    dom.root.addEventListener('click', handleRootClick);
+    const observer = new IntersectionObserver(handleImageLazyLoad, { rootMargin: "200px" });
+    document.addEventListener('view-rendered', () => {
+        document.querySelectorAll('img.lazy').forEach(img => observer.observe(img));
+    });
 }
 
-// Single entry point: Wait for the DOM to be ready, then launch the app.
-document.addEventListener('DOMContentLoaded', main);
+function handleRootClick(e) {
+    const watchlistIcon = e.target.closest('.watchlist-icon');
+    if (watchlistIcon) {
+        const card = watchlistIcon.closest('.poster-card');
+        const movieId = parseInt(card.dataset.movieId);
+        
+        if (storage.isMovieInWatchlist(movieId)) {
+            storage.removeFromWatchlist(movieId);
+            watchlistIcon.classList.remove('active');
+        } else {
+            storage.addToWatchlist(movieId);
+            watchlistIcon.classList.add('active');
+        }
+    }
+}
+
+function handleImageLazyLoad(entries, observer) {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const img = entry.target;
+            img.src = img.dataset.src;
+            img.classList.remove('lazy');
+            img.classList.add('loaded');
+            observer.unobserve(img);
+        }
+    });
+}
+
+// ================================================================
+// --- UTILITY & HELPER FUNCTIONS ---
+// ================================================================
+
+function showLoading() {
+    render(`<div class="loading-container"><div class="spinner"></div><p>Loading Cinematic Data...</p></div>`);
+}
+
+function updateBackdrop(imageUrl = null) {
+    if (imageUrl && state.currentBackdrop !== imageUrl) {
+        dom.backdrop.style.backgroundImage = `url(${imageUrl})`;
+        dom.backdrop.style.opacity = '1';
+        state.currentBackdrop = imageUrl;
+    } else if (!imageUrl) {
+        dom.backdrop.style.opacity = '0';
+        state.currentBackdrop = null;
+    }
+}
+
+function updateThemeColor(imageUrl) {
+    const img = document.createElement('img');
+    img.crossOrigin = 'Anonymous';
+    img.src = imageUrl;
+    img.onload = () => {
+        const colorThief = new ColorThief();
+        const dominantColor = colorThief.getColor(img);
+        document.documentElement.style.setProperty('--color-primary', `rgb(${dominantColor.join(',')})`);
+        document.documentElement.style.setProperty('--color-primary-glow', `rgba(${dominantColor.join(',')}, 0.3)`);
+    };
+    img.onerror = () => { // Reset to default if image fails
+        document.documentElement.style.setProperty('--color-primary', '#00f6ff');
+        document.documentElement.style.setProperty('--color-primary-glow', 'rgba(0, 246, 255, 0.3)');
+    };
+}
+
+function updateAuthUI() {
+    if (storage.getTraktTokens()) {
+        state.isTraktAuthenticated = true;
+        dom.trakt.authBtn.textContent = 'Logout Trakt';
+        dom.trakt.statsLink.style.display = 'inline-block';
+    } else {
+        state.isTraktAuthenticated = false;
+        dom.trakt.authBtn.textContent = 'Connect Trakt';
+        dom.trakt.statsLink.style.display = 'none';
+    }
+}
+
+async function handleAuthCallback() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get('code');
+    if (authCode) {
+        try {
+            await trakt.handleTraktCallback(authCode);
+            updateAuthUI();
+        } catch (error) {
+            console.error("Trakt auth failed:", error);
+            // Optionally show an error message to the user
+        }
+    }
+}
+
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/service-worker.js')
+            .then(registration => console.log('Service Worker registered with scope:', registration.scope))
+            .catch(error => console.log('Service Worker registration failed:', error));
+    }
+}
+
+// ================================================================
+// --- APPLICATION INITIALIZATION ---
+// ================================================================
+
+async function init() {
+    registerServiceWorker();
+    await handleAuthCallback();
+    updateAuthUI();
+    initEventListeners();
+    router();
+}
+
+init();
