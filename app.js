@@ -1,196 +1,280 @@
 /*
 ================================================================
-APP.JS - MAIN APPLICATION ENTRY POINT
-- Initializes the application, service worker, and authentication logic.
-- Contains the client-side router for SPA-like navigation.
-- Manages the rendering of different 'views' into the app-root.
+APP.JS - MAIN APPLICATION ENTRY POINT (DEBUGGED & REFACTORED)
+- Initializes the application and all core features.
+- Contains a more robust client-side router and view management
+  system that properly handles cleanup to prevent memory leaks.
 ================================================================
 */
 
-// Import modules
-import * as api from './api.js';
-import * as storage from './storage.js';
-import * as trakt from './trakt.js';
-import * as gemini from './gemini.js';
+// Import modules with consistent named imports
+import { getTrendingMovies, getUpcomingMovies, getPosterUrl, getMovieDetails, searchTMDB } from './api.js';
+import { getWatchlist, addToWatchlist, removeFromWatchlist, isMovieInWatchlist, getTraktTokens } from './storage.js';
+import { redirectToTraktAuth, handleTraktCallback, logoutTrakt } from './trakt.js';
+import { analyzeQuery, getAIRecommendations } from './gemini.js';
 
 
-/**
- * Router to manage SPA navigation.
- */
-const router = {
-    routes: {
-        '': 'HomeView',
-        'home': 'HomeView',
-        'search': 'SearchView' // New route for search results
-    },
+// --- VIEW CLASSES ---
 
-    async navigate() {
-        // Extract the base path and the query parameter
-        const fullHash = window.location.hash.slice(1);
-        const [path, query] = fullHash.split('?');
-        const viewName = this.routes[path.toLowerCase()] || this.routes[''];
-
-        if (viewName) {
-            const view = new window[viewName]();
-            // Pass the query to the view's render method
-            view.render(query); 
-        } else {
-            console.error(`No route found for path: ${path}`);
-        }
-    }
-};
-
-/**
- * Home View: Renders the main landing page.
- */
 class HomeView {
     async render() {
-        const appRoot = document.getElementById('app-root');
-        appRoot.innerHTML = `
+        document.getElementById('app-root').innerHTML = `
             <div class="view home-view">
                 <section class="hero-section">
                     <h1>Welcome to pcinegpt.</h1>
                     <p class="tagline">Navigating the Cinematic Universe with AI.</p>
                 </section>
-                <section id="trending-carousel" class="carousel">
-                    <h2>Trending Now</h2>
-                    <div class="carousel-content"></div>
-                </section>
-                <section id="upcoming-carousel" class="carousel">
-                    <h2>Coming Soon</h2>
-                    <div class="carousel-content"></div>
-                </section>
+                <section id="trending-carousel" class="carousel"><h2>Trending Now</h2><div class="carousel-content"></div></section>
+                <section id="upcoming-carousel" class="carousel"><h2>Coming Soon</h2><div class="carousel-content"></div></section>
             </div>
         `;
-        await this.renderCarousel('#trending-carousel', api.getTrendingMovies);
-        await this.renderCarousel('#upcoming-carousel', api.getUpcomingMovies);
+        await this.renderCarousel('#trending-carousel', getTrendingMovies);
+        await this.renderCarousel('#upcoming-carousel', getUpcomingMovies);
         lazyLoadImages();
     }
 
-    async renderCarousel(carouselId, apiFunction) { /* ... (This function remains unchanged) ... */ }
+    async renderCarousel(carouselId, apiFunction) {
+        const contentContainer = document.querySelector(`${carouselId} .carousel-content`);
+        try {
+            const data = await apiFunction();
+            if (data && data.results) {
+                contentContainer.innerHTML = data.results.map(movie => {
+                    if (!movie.poster_path) return '';
+                    return createPosterCardHTML(movie);
+                }).join('');
+            }
+        } catch (error) { console.error(`Failed to render carousel ${carouselId}:`, error); }
+    }
+    // This view has no listeners to clean up, so no destroy method is needed.
 }
-// This is a condensed version for brevity. Assume the full function from the previous step is here.
-HomeView.prototype.renderCarousel = async function(carouselId, apiFunction) {
-    const contentContainer = document.querySelector(`${carouselId} .carousel-content`);
-    try {
-        const data = await apiFunction();
-        const movies = data.results;
-        if (movies && movies.length > 0) {
-            contentContainer.innerHTML = movies.map(movie => {
-                if (!movie.poster_path) return '';
-                const activeClass = storage.isMovieInWatchlist(movie.id) ? 'active' : '';
-                return `
-                    <div class="poster-card" data-movie-id="${movie.id}">
-                        <img class="lazy" data-src="${api.getPosterUrl(movie.poster_path)}" alt="${movie.title}">
-                        <div class="favorite-icon ${activeClass}" data-movie-id="${movie.id}"><svg viewBox="0 0 24 24"><path d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"></path></svg></div>
-                    </div>`;
-            }).join('');
-        }
-    } catch (error) { console.error(`Failed to render carousel ${carouselId}:`, error); }
-};
 
-/**
- * Search View: Renders the AI-powered search results.
- */
 class SearchView {
     async render(queryString) {
         const appRoot = document.getElementById('app-root');
-        const queryParams = new URLSearchParams(queryString);
-        const query = queryParams.get('q');
-
+        const query = new URLSearchParams(queryString).get('q');
         if (!query) {
-            appRoot.innerHTML = `<div class="view search-view"><h1>Please enter a search term.</h1></div>`;
+            appRoot.innerHTML = `<div class="view search-view"><h1>Please provide a search query.</h1></div>`;
             return;
         }
 
-        // Render loading state immediately
-        appRoot.innerHTML = `
-            <div class="view search-view">
-                <h1>Results for: <span class="query-display">"${query}"</span></h1>
-                <div class="loading-container">
-                    <div class="spinner"></div>
-                    <p>Asking the AI for recommendations...</p>
-                </div>
-                <div class="search-results-grid"></div>
-            </div>
-        `;
+        appRoot.innerHTML = createLoadingHTML(query);
 
         try {
-            // 1. Analyze the user's query
-            const analysis = await gemini.analyzeQuery(query);
-            
-            // 2. Get recommendations from Gemini
-            const recommendationsText = await gemini.getAIRecommendations({
-                searchQuery: query,
-                type: analysis.type,
-                numResults: 12
-            });
-
-            // 3. Parse the AI response
+            const analysis = await analyzeQuery(query);
+            const recommendationsText = await getAIRecommendations({ searchQuery: query, type: analysis.type, numResults: 12 });
             const recommendations = recommendationsText.trim().split('\n').map(line => {
                 const [type, name, year] = line.split('|');
                 return { type, name, year };
             });
 
-            // 4. Fetch poster data for each recommendation from TMDB
-            const resultsWithPosters = await Promise.all(
-                recommendations.map(async (rec) => {
-                    const tmdbData = await api.searchTMDB(rec.type === 'series' ? 'tv' : 'movie', rec.name, rec.year);
-                    return { ...rec, tmdbData };
-                })
+            const resultsWithData = await Promise.all(
+                recommendations.map(rec => searchTMDB(rec.type === 'series' ? 'tv' : 'movie', rec.name, rec.year))
             );
 
-            // 5. Render the final results
+            document.querySelector('.loading-container').style.display = 'none';
             const resultsGrid = document.querySelector('.search-results-grid');
-            document.querySelector('.loading-container').style.display = 'none'; // Hide spinner
-
-            resultsGrid.innerHTML = resultsWithPosters.map(item => {
-                if (!item.tmdbData) return ''; // Skip if no TMDB match found
-                const activeClass = storage.isMovieInWatchlist(item.tmdbData.id) ? 'active' : '';
-                const posterPath = item.tmdbData.poster_path;
-
-                return `
-                    <div class="poster-card" data-movie-id="${item.tmdbData.id}">
-                        <img class="lazy" data-src="${api.getPosterUrl(posterPath)}" alt="${item.name}">
-                        <div class="favorite-icon ${activeClass}" data-movie-id="${item.tmdbData.id}"><svg viewBox="0 0 24 24"><path d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"></path></svg></div>
-                    </div>
-                `;
-            }).join('');
-
-            lazyLoadImages(); // Activate lazy loading for new images
-
+            resultsGrid.innerHTML = resultsWithData
+                .filter(Boolean) // Filter out any null results from searchTMDB
+                .map(movieData => createPosterCardHTML(movieData))
+                .join('');
+            lazyLoadImages();
         } catch (error) {
             console.error('Failed to get AI search results:', error);
-            document.querySelector('.loading-container').innerHTML = `<p>Sorry, something went wrong while fetching results.</p>`;
+            document.querySelector('.loading-container').innerHTML = `<p>Sorry, an error occurred while asking the AI.</p>`;
         }
     }
 }
 
+class DetailView {
+    constructor() {
+        this.handleParallaxScroll = this.handleParallaxScroll.bind(this);
+    }
 
-// Make views globally accessible
-window.HomeView = HomeView;
-window.SearchView = SearchView;
+    async render(movieId) {
+        if (!movieId) return;
+        const appRoot = document.getElementById('app-root');
+        appRoot.innerHTML = `<div class="loading-container"><div class="spinner"></div></div>`;
+        
+        try {
+            const details = await getMovieDetails(movieId);
+            const posterUrl = getPosterUrl(details.poster_path, 'w500');
 
+            appRoot.innerHTML = `
+                <div class="view detail-view">
+                    <div class="backdrop"></div>
+                    <div class="detail-content">
+                        <header class="detail-header">
+                            <div class="detail-poster"><img src="${posterUrl}" alt="${details.title}" crossorigin="anonymous"></div>
+                            <div class="detail-title">
+                                <h1>${details.title}</h1>
+                                <p>${details.tagline || ''}</p>
+                                <div class="detail-meta">
+                                    <span>${new Date(details.release_date).getFullYear()}</span>
+                                    <span>•</span>
+                                    <span>${details.runtime} min</span>
+                                    <span>•</span>
+                                    <span>⭐ ${details.vote_average.toFixed(1)}</span>
+                                </div>
+                                <div class="detail-actions"></div>
+                            </div>
+                        </header>
+                        <main class="detail-body">
+                            <h2>Overview</h2>
+                            <p>${details.overview}</p>
+                        </main>
+                    </div>
+                </div>
+            `;
+            
+            this.setupParallax(details.backdrop_path);
+            this.setupDynamicTheming(movieId);
+        } catch (error) {
+            console.error('Failed to render detail view:', error);
+            appRoot.innerHTML = `<p>Could not load movie details.</p>`;
+        }
+    }
+    
+    setupDynamicTheming(movieId) {
+        const posterImg = document.querySelector('.detail-poster img');
+        if (posterImg.complete) {
+            this.applyColorTheme(posterImg, movieId);
+        } else {
+            posterImg.addEventListener('load', () => this.applyColorTheme(posterImg, movieId), { once: true });
+        }
+    }
 
-// --- Event Handlers & Initializers ---
+    applyColorTheme(imgElement, movieId) {
+        const colorThief = new ColorThief();
+        const [r, g, b] = colorThief.getColor(imgElement);
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        const textColor = brightness > 125 ? '#000000' : '#FFFFFF';
+        const themeColor = `rgb(${r}, ${g}, ${b})`;
+        
+        document.documentElement.style.setProperty('--theme-color-primary', themeColor);
+        document.documentElement.style.setProperty('--theme-color-text', textColor);
+        
+        const isInWatchlist = isMovieInWatchlist(movieId);
+        document.querySelector('.detail-actions').innerHTML = `
+            <button class="watchlist-btn" data-movie-id="${movieId}">
+                ${isInWatchlist ? '✓ Added to Watchlist' : '+ Add to Watchlist'}
+            </button>`;
+    }
 
-function handleWatchlistClick(event) { /* ... (Unchanged) ... */ }
-HomeView.prototype.handleWatchlistClick = function(event) {
-    const icon = event.target.closest('.favorite-icon');
-    if (!icon) return;
-    const movieId = parseInt(icon.dataset.movieId, 10);
-    if (!movieId) return;
-    if (storage.isMovieInWatchlist(movieId)) {
-        storage.removeFromWatchlist(movieId);
-        icon.classList.remove('active');
-    } else {
-        storage.addToWatchlist(movieId);
-        icon.classList.add('active');
+    setupParallax(backdropPath) {
+        this.backdrop = document.querySelector('.backdrop');
+        if (this.backdrop) {
+            this.backdrop.style.backgroundImage = `url(${getPosterUrl(backdropPath, 'original')})`;
+            window.addEventListener('scroll', this.handleParallaxScroll);
+        }
+    }
+
+    handleParallaxScroll() {
+        if (this.backdrop) {
+            this.backdrop.style.transform = `translateY(${window.scrollY * 0.4}px)`;
+        }
+    }
+    
+    destroy() {
+        window.removeEventListener('scroll', this.handleParallaxScroll);
+        document.documentElement.style.removeProperty('--theme-color-primary');
+        document.documentElement.style.removeProperty('--theme-color-text');
+        console.log('DetailView destroyed, scroll listener removed.');
+    }
+}
+
+// --- ROUTER & LIFECYCLE MANAGEMENT (REFACTORED) ---
+const router = {
+    routes: {
+        '': HomeView,
+        'home': HomeView,
+        'search': SearchView,
+        'detail': DetailView
+    },
+    currentView: null,
+
+    async navigate() {
+        // 1. Clean up the previous view
+        if (this.currentView && typeof this.currentView.destroy === 'function') {
+            this.currentView.destroy();
+        }
+
+        // 2. Determine the new view
+        const fullHash = window.location.hash.slice(1);
+        const [path, param] = fullHash.split('/');
+        const [basePath, query] = path.split('?');
+        
+        const ViewClass = this.routes[basePath.toLowerCase()] || this.routes[''];
+        if (ViewClass) {
+            // 3. Create a new instance and render it
+            this.currentView = new ViewClass();
+            this.currentView.render(param || query);
+        } else {
+            console.error(`No route found for path: ${basePath}`);
+            // Optionally, render a 404 view
+            document.getElementById('app-root').innerHTML = `<h1>404 - Not Found</h1>`;
+        }
     }
 };
 
-function lazyLoadImages() { /* ... (Unchanged) ... */ }
-HomeView.prototype.lazyLoadImages = function() {
+// --- GLOBAL HELPER FUNCTIONS ---
+
+function createPosterCardHTML(movieData) {
+    const id = movieData.id;
+    const title = movieData.title || movieData.name;
+    const posterPath = movieData.poster_path;
+    const isInWatchlist = isMovieInWatchlist(id);
+
+    return `
+        <div class="poster-card" data-movie-id="${id}">
+            <a href="#detail/${id}">
+                <img class="lazy" data-src="${getPosterUrl(posterPath)}" alt="${title}">
+            </a>
+            <div class="favorite-icon ${isInWatchlist ? 'active' : ''}" data-movie-id="${id}">
+                <svg viewBox="0 0 24 24"><path d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"></path></svg>
+            </div>
+        </div>`;
+}
+
+function createLoadingHTML(query) {
+    return `<div class="view search-view"><h1>Results for: <span class="query-display">"${query}"</span></h1><div class="loading-container"><div class="spinner"></div><p>Asking the AI...</p></div><div class="search-results-grid"></div></div>`;
+}
+
+function handleWatchlistClick(event) {
+    const target = event.target.closest('.favorite-icon, .watchlist-btn');
+    if (!target) return;
+    const movieId = parseInt(target.dataset.movieId, 10);
+    if (!movieId) return;
+    
+    const isAdding = !isMovieInWatchlist(movieId);
+    
+    if (isAdding) {
+        addToWatchlist(movieId);
+    } else {
+        removeFromWatchlist(movieId);
+    }
+    
+    // Update all relevant UI elements on the page
+    document.querySelectorAll(`[data-movie-id="${movieId}"]`).forEach(el => {
+        if (el.classList.contains('favorite-icon')) {
+            el.classList.toggle('active', isAdding);
+        }
+        if (el.classList.contains('watchlist-btn')) {
+            el.textContent = isAdding ? '✓ Added to Watchlist' : '+ Add to Watchlist';
+        }
+    });
+}
+
+function handleSearch(event) {
+    if (event.key === 'Enter') {
+        const query = event.target.value.trim();
+        if (query) {
+            window.location.hash = `#search?q=${encodeURIComponent(query)}`;
+            event.target.value = '';
+        }
+    }
+}
+
+function lazyLoadImages() {
     const lazyImages = document.querySelectorAll('img.lazy');
     if ('IntersectionObserver' in window) {
         const observer = new IntersectionObserver((entries, obs) => {
@@ -198,64 +282,65 @@ HomeView.prototype.lazyLoadImages = function() {
                 if (entry.isIntersecting) {
                     const img = entry.target;
                     img.src = img.dataset.src;
-                    img.onload = () => { img.classList.remove('lazy'); img.classList.add('loaded'); };
+                    img.classList.remove('lazy');
+                    img.onload = () => img.classList.add('loaded');
                     obs.unobserve(img);
                 }
             });
-        });
+        }, { rootMargin: "0px 0px 200px 0px" }); // Start loading images 200px before they enter the viewport
         lazyImages.forEach(img => observer.observe(img));
+    } else { // Fallback
+        lazyImages.forEach(img => {
+            img.src = img.dataset.src;
+            img.classList.add('loaded');
+        });
     }
-};
+}
 
-function registerServiceWorker() { /* ... (Unchanged) ... */ }
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(reg => console.log('Service Worker registered.', reg))
+                .catch(err => console.error('Service Worker registration failed:', err));
+        });
+    }
+}
 
-function updateTraktButtonUI() { /* ... (Unchanged) ... */ }
-HomeView.prototype.updateTraktButtonUI = function() {
+function updateTraktButtonUI() {
     const authButton = document.getElementById('trakt-auth-button');
-    if (storage.getTraktTokens()) {
+    if (getTraktTokens()) {
         authButton.textContent = 'Logout Trakt';
     } else {
         authButton.textContent = 'Connect Trakt';
     }
-};
-
-function handleSearch(event) {
-    if (event.key === 'Enter') {
-        const searchInput = event.target;
-        const query = searchInput.value.trim();
-        if (query) {
-            // Navigate to the search view with the query
-            window.location.hash = `#search?q=${encodeURIComponent(query)}`;
-            searchInput.value = ''; // Clear the input
-        }
-    }
 }
 
+// --- INITIALIZATION ---
 async function initialize() {
     registerServiceWorker();
 
-    // Event Listeners
-    document.getElementById('app-root').addEventListener('click', HomeView.prototype.handleWatchlistClick);
+    // Setup global event listeners
+    document.getElementById('app-root').addEventListener('click', handleWatchlistClick);
     document.getElementById('search-input').addEventListener('keypress', handleSearch);
     document.getElementById('trakt-auth-button').addEventListener('click', () => {
-        storage.getTraktTokens() ? trakt.logoutTrakt() : trakt.redirectToTraktAuth();
+        getTraktTokens() ? logoutTrakt() : redirectToTraktAuth();
     });
-
-    // Handle Trakt callback
+    
+    // Handle Trakt OAuth callback
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('code')) {
-        await trakt.handleTraktCallback(urlParams.get('code'));
+        await handleTraktCallback(urlParams.get('code'));
     }
     
-    HomeView.prototype.updateTraktButtonUI();
-
-    // Set up router
+    updateTraktButtonUI();
+    
+    // Setup and start the router
     window.addEventListener('hashchange', () => router.navigate());
-    // Initial load navigation
     if (!window.location.hash) {
         window.location.hash = '#home';
     }
-    router.navigate();
+    router.navigate(); // Initial page load navigation
 }
 
 document.addEventListener('DOMContentLoaded', initialize);
