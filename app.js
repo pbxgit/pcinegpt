@@ -27,7 +27,7 @@ const dom = {
 const state = {
     isTraktAuthenticated: false,
     currentTheme: 'light',
-    currentView: null, // Track the current view to prevent race conditions
+    currentViewPath: null, // Track the current route path to prevent race conditions
     traktWatchlist: [], // Cache watchlist for faster checks
 };
 
@@ -38,7 +38,7 @@ const state = {
 function applyTheme(theme) {
     state.currentTheme = theme;
     document.documentElement.setAttribute('data-theme', theme);
-    storage.saveTheme(theme); // Use storage module to save theme
+    storage.saveTheme(theme);
 
     const sunIcon = dom.themeToggleBtn.querySelector('.theme-icon-sun');
     const moonIcon = dom.themeToggleBtn.querySelector('.theme-icon-moon');
@@ -71,7 +71,7 @@ function initTheme() {
 const routes = {
     '/': 'renderHomeView',
     '/movie/:id': 'renderDetailView',
-    '/tv/:id': 'renderDetailView', // Reuse detail view for TV
+    '/tv/:id': 'renderDetailView',
     '/search/:query': 'renderSearchView',
     '/stats': 'renderStatsView',
 };
@@ -81,8 +81,11 @@ async function router() {
     showLoading();
 
     const hash = window.location.hash.substring(1) || '/';
-    state.currentView = hash.split('/')[0] || 'home'; // Update current view state
     const [path, param] = hash.split(/(?<=^\/[a-zA-Z]+)\/(.*)/s).filter(Boolean);
+    
+    // BUG FIX: Use the router's resolved path for the state, not a fragile split().
+    state.currentViewPath = path || '/';
+
     const routeHandlerName = routes[path] || routes['/'];
     const handler = viewHandlers[routeHandlerName];
 
@@ -91,7 +94,7 @@ async function router() {
         await handler({ param, type });
     } catch (error) {
         console.error(`Failed to render view: ${routeHandlerName}`, error);
-        renderError('Could not load content.');
+        renderError('Could not load content. Please try again later.');
     }
 }
 
@@ -99,7 +102,6 @@ const viewHandlers = {
     async renderHomeView() {
         const aiPromptHtml = createAIPrompt();
         render(aiPromptHtml, { instant: true });
-        // Asynchronously fetch carousels after the main UI is visible
         loadDiscoveryCarousels();
     },
 
@@ -145,7 +147,7 @@ const viewHandlers = {
             document.querySelector('.search-view').insertAdjacentHTML('beforeend', searchCarousel);
         } else {
             renderError('The AI could not find any results. Please try another query.', document.querySelector('.search-view'));
-            document.querySelector('.search-title').style.display = 'none'; // Hide the heading
+            document.querySelector('.search-title').style.display = 'none';
         }
     },
     
@@ -192,7 +194,6 @@ function render(html, options = {}) {
         target.innerHTML = '';
         target.insertAdjacentHTML('beforeend', html);
     }
-    // Safely create icons
     if (window.lucide) {
         lucide.createIcons();
     }
@@ -200,7 +201,7 @@ function render(html, options = {}) {
 }
 
 function renderError(message, target = dom.root) {
-    target.innerHTML = `<div class="error-view" style="text-align: center;"><p>${message}</p></div>`;
+    target.innerHTML = `<div class="error-view" style="text-align: center; padding: 2rem;"><p>${message}</p></div>`;
 }
 
 // ================================================================
@@ -208,7 +209,7 @@ function renderError(message, target = dom.root) {
 // ================================================================
 
 async function loadDiscoveryCarousels() {
-    if (state.currentView !== 'home') return;
+    if (state.currentViewPath !== '/') return;
     
     const carouselContainer = document.querySelector('.carousel-master-container');
     if (!carouselContainer) return;
@@ -224,18 +225,18 @@ async function loadDiscoveryCarousels() {
         carouselsToLoad.push({
             title: "Based on Your Top Ratings",
             fetcher: getTraktPersonalizedRecs,
-            type: 'movie'
+            type: 'movie' // This could be enhanced to be dynamic
         });
     }
 
     for (let i = 0; i < carouselsToLoad.length; i++) {
-        if (state.currentView !== 'home') return;
+        if (state.currentViewPath !== '/') return;
         try {
             const { title, fetcher, type } = carouselsToLoad[i];
             const data = await fetcher();
             if (data && data.length > 0) {
                 const carouselHtml = createCarousel(title, data, type);
-                if (state.currentView === 'home') {
+                if (state.currentViewPath === '/') {
                     const carouselEl = document.createElement('div');
                     carouselEl.className = 'carousel-container';
                     carouselEl.style.animationDelay = `${i * 150}ms`;
@@ -244,7 +245,7 @@ async function loadDiscoveryCarousels() {
                 }
             }
         } catch (error) {
-            console.error(`Failed to load carousel:`, error);
+            console.error(`Failed to load carousel "${carouselsToLoad[i].title}":`, error);
         }
     }
 }
@@ -268,7 +269,7 @@ async function parseAndFetchGeminiResults(geminiResponse) {
     const promises = lines.map(line => {
         const [type, title, year] = line.split('|');
         if (type && title && year) {
-            return api.searchTMDB(type, title, year);
+            return api.searchTMDB(type.trim(), title.trim(), year.trim());
         }
         return null;
     }).filter(Boolean);
@@ -371,7 +372,7 @@ async function handleWatchlistClick(e) {
         } else {
             await trakt.addToWatchlist(mediaItem);
         }
-        await fetchTraktWatchlist(); // Refresh local cache
+        await fetchTraktWatchlist();
         button.innerHTML = !isInWatchlist ? '<i data-lucide="check"></i> In Watchlist' : '<i data-lucide="plus"></i> Add to Watchlist';
         if (window.lucide) lucide.createIcons();
     } catch (error) {
@@ -404,7 +405,7 @@ async function handleAuthCallback() {
     if (authCode) {
         await trakt.handleTraktCallback(authCode);
         updateAuthUI();
-        return true; // Indicate that an auth action was handled
+        return true;
     }
     return false;
 }
@@ -430,21 +431,26 @@ function initEventListeners() {
 }
 
 async function init() {
-    if (window.lucide) {
-        lucide.createIcons();
-    }
-    
-    initTheme();
-    initEventListeners();
-    
-    const authHandled = await handleAuthCallback();
-    updateAuthUI();
-    await fetchTraktWatchlist();
-    
-    if (!authHandled) {
-        router();
-    } else {
-        window.location.hash = '/';
+    try {
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+        
+        initTheme();
+        initEventListeners();
+        
+        const authHandled = await handleAuthCallback();
+        updateAuthUI();
+        await fetchTraktWatchlist();
+        
+        if (!authHandled) {
+            router();
+        } else {
+            window.location.hash = '/';
+        }
+    } catch (error) {
+        console.error("A critical error occurred during app initialization:", error);
+        renderError("The application failed to start. Please try refreshing the page.");
     }
 }
 
