@@ -1,11 +1,11 @@
 {
     "name": "pcinegpt",
     "short_name": "pcinegpt",
-    "description": "Navigating the Cinematic Universe with AI.",
+    "description": "An award-winning fusion of design and AI. Discover movies and shows through a futuristic, human-centered experience.",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#101010",
-    "theme_color": "#101010",
+    "background_color": "#18181A",
+    "theme_color": "#18181A",
     "orientation": "portrait-primary",
     "icons": [
         {
