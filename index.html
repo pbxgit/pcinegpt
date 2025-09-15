@@ -6,18 +6,35 @@
 
     <!-- Primary Meta Tags -->
     <title>pcinegpt - Your Conversational Movie Navigator</title>
-    <meta name="description" content="An AI-powered movie and show discovery platform with a modern, conversational interface.">
+    <meta name="description" content="An AI-powered movie and show discovery platform with a modern, conversational interface. Find your next favorite thing to watch.">
     <link rel="icon" type="image/png" href="/icons/favicon.png">
 
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://pcinegpt.example.com/"> <!-- Replace with your actual URL -->
+    <meta property="og:title" content="pcinegpt - Your Conversational Movie Navigator">
+    <meta property="og:description" content="An AI-powered movie and show discovery platform with a modern, conversational interface.">
+    <meta property="og:image" content="https://pcinegpt.example.com/social-share-image.png"> <!-- Replace with your share image URL -->
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://pcinegpt.example.com/"> <!-- Replace with your actual URL -->
+    <meta property="twitter:title" content="pcinegpt - Your Conversational Movie Navigator">
+    <meta property="twitter:description" content="An AI-powered movie and show discovery platform with a modern, conversational interface.">
+    <meta property="twitter:image" content="https://pcinegpt.example.com/social-share-image.png"> <!-- Replace with your share image URL -->
+
     <!-- PWA & Mobile Meta Tags -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F4F4F4">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F9F9F9">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0A0A">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="pcinegpt">
     <meta name="application-name" content="pcinegpt">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+
+    <!-- Preconnect for faster font loading -->
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
 
     <!-- Stylesheets -->
     <link rel="stylesheet" href="main.css">
@@ -36,23 +53,31 @@
     <!-- Header -->
     <header class="app-header">
         <div class="header-content">
-            <a href="/" class="logo" aria-label="pcinegpt Home">
-                pcinegpt
-            </a>
-            <div class="header-actions">
+            <a href="/" class="logo" aria-label="pcinegpt Home">pcinegpt</a>
+            <nav class="header-actions" aria-label="Main navigation">
                 <a href="#stats" id="stats-nav-link" class="nav-link" style="display: none;">My Stats</a>
                 <button id="trakt-auth-button" class="trakt-button">Connect Trakt</button>
-                <!-- Add a theme toggle button -->
-                <button id="theme-toggle-button" class="icon-button" aria-label="Toggle Theme">
+                <button id="theme-toggle-button" class="icon-button" aria-label="Toggle light and dark theme">
                     <i data-lucide="sun" class="theme-icon-sun"></i>
                     <i data-lucide="moon" class="theme-icon-moon" style="display: none;"></i>
                 </button>
-            </div>
+            </nav>
         </div>
     </header>
 
     <!-- Main Content Root -->
-    <main id="app-root" class="app-main"></main>
+    <main id="app-root" class="app-main">
+        <!-- App views will be dynamically rendered here -->
+    </main>
+
+    <!-- Fallback for users with JavaScript disabled -->
+    <noscript>
+        <div style="text-align: center; padding: 40px; font-size: 1.2em;">
+            <h1>JavaScript is Required</h1>
+            <p>This application is highly interactive and requires JavaScript to be enabled.</p>
+            <p>Please enable it in your browser settings to continue.</p>
+        </div>
+    </noscript>
 
 </body>
 </html>
