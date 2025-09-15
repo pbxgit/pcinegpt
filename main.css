@@ -1,0 +1,230 @@
+/*
+================================================================
+CORE & THEME SETUP
+- Establishes the foundational dark theme, typography, and layout.
+- Uses modern CSS custom properties for easy management of the
+  color palette and design tokens.
+================================================================
+*/
+:root {
+    /* Color Palette */
+    --color-background: #121212;
+    --color-surface: #1E1E1E;
+    --color-primary: #BB86FC;
+    --color-primary-variant: #3700B3;
+    --color-secondary: #03DAC6;
+    --color-on-background: #FFFFFF;
+    --color-on-surface: #E0E0E0;
+    --color-on-primary: #000000;
+    --color-subtle-text: #A0A0A0;
+
+    /* Typography */
+    --font-family-main: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-size-base: 16px;
+    --font-size-lg: 1.125rem; /* 18px */
+    --font-size-xl: 1.5rem;   /* 24px */
+    --font-size-xxl: 2.5rem;  /* 40px */
+
+    /* Layout & Spacing */
+    --spacing-unit: 8px;
+    --container-width: 1200px;
+    --header-height: 70px;
+    --border-radius: 8px;
+
+    /* Transitions & Animations */
+    --transition-speed-fast: 0.2s;
+    --transition-speed-normal: 0.4s;
+    --timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+================================================================
+GLOBAL RESETS & BASE STYLES
+- A modern reset to ensure consistency across browsers.
+- Sets up the core body styles and default typography.
+================================================================
+*/
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    scroll-behavior: smooth;
+}
+
+body {
+    background-color: var(--color-background);
+    color: var(--color-on-background);
+    font-family: var(--font-family-main);
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color var(--transition-speed-fast) ease;
+}
+
+a:hover {
+    color: var(--color-secondary);
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/*
+================================================================
+HEADER & NAVIGATION
+- Styles for the fixed application header, logo, and actions.
+================================================================
+*/
+.app-header {
+    background-color: rgba(18, 18, 18, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    height: var(--header-height);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 calc(var(--spacing-unit) * 3);
+}
+
+.header-content {
+    width: 100%;
+    max-width: var(--container-width);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: var(--color-on-background);
+    letter-spacing: -0.5px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing-unit) * 2);
+}
+
+.search-bar {
+    background-color: var(--color-surface);
+    border: 1px solid transparent;
+    border-radius: var(--border-radius);
+    color: var(--color-on-surface);
+    font-family: var(--font-family-main);
+    font-size: 0.9rem;
+    padding: calc(var(--spacing-unit) * 1.2) calc(var(--spacing-unit) * 2);
+    width: 280px;
+    transition: all var(--transition-speed-fast) ease;
+    outline: none;
+}
+
+.search-bar:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(187, 134, 252, 0.3);
+}
+
+/*
+================================================================
+BUTTONS & MICRO-INTERACTIONS
+- Core styles for interactive elements, focusing on tactile
+  feedback through transitions.
+================================================================
+*/
+.trakt-button {
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+    border: none;
+    border-radius: var(--border-radius);
+    padding: calc(var(--spacing-unit) * 1.2) calc(var(--spacing-unit) * 3);
+    font-family: var(--font-family-main);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all var(--transition-speed-fast) var(--timing-function);
+    transform: scale(1);
+}
+
+.trakt-button:hover {
+    background-color: var(--color-secondary);
+    box-shadow: 0 4px 15px rgba(3, 218, 198, 0.2);
+    transform: scale(1.05) translateY(-2px);
+}
+
+.trakt-button:active {
+    transform: scale(0.98) translateY(0);
+}
+
+/*
+================================================================
+MAIN CONTENT & FOOTER
+- Defines the main layout container and the simple footer.
+================================================================
+*/
+.app-main {
+    padding-top: var(--header-height);
+    min-height: 100vh;
+    width: 100%;
+    max-width: var(--container-width);
+    margin: 0 auto;
+    padding-left: calc(var(--spacing-unit) * 3);
+    padding-right: calc(var(--spacing-unit) * 3);
+    padding-bottom: calc(var(--spacing-unit) * 10); /* Footer space */
+}
+
+.app-footer {
+    text-align: center;
+    padding: calc(var(--spacing-unit) * 3);
+    color: var(--color-subtle-text);
+    font-size: 0.85rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: calc(var(--spacing-unit) * 4);
+}
+
+/*
+================================================================
+VIEW TRANSITIONS (SPA ROUTER SUPPORT)
+- Classes to manage the seamless transitions between views.
+- The router will toggle these classes on view containers.
+================================================================
+*/
+.view {
+    animation: fadeIn var(--transition-speed-normal) var(--timing-function);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
