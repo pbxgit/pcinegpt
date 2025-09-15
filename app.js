@@ -7,8 +7,9 @@ APP.JS - MAIN APPLICATION ENTRY POINT
 ================================================================
 */
 
-// Import API functions
+// Import API and Storage functions
 import { getTrendingMovies, getUpcomingMovies, getPosterUrl } from './api.js';
+import { getWatchlist, addToWatchlist, removeFromWatchlist, isMovieInWatchlist } from './storage.js';
 
 /**
  * A simple, hash-based router for navigating between views without
@@ -71,7 +72,7 @@ class HomeView {
     }
 
     /**
-     * Fetches data using the provided API function and renders a carousel.
+     * Fetches data and renders a carousel with watchlist icons.
      * @param {string} carouselId - The CSS selector for the carousel container.
      * @param {Function} apiFunction - The function from api.js to call.
      */
@@ -84,12 +85,17 @@ class HomeView {
             const movies = data.results;
 
             if (movies && movies.length > 0) {
-                // Generate HTML with data-src for lazy loading
                 const postersHTML = movies.map(movie => {
                     if (!movie.poster_path) return '';
+                    const isInWatchlist = isMovieInWatchlist(movie.id);
+                    const activeClass = isInWatchlist ? 'active' : '';
+
                     return `
                         <div class="poster-card" data-movie-id="${movie.id}">
                             <img class="lazy" data-src="${getPosterUrl(movie.poster_path)}" alt="${movie.title}">
+                            <div class="favorite-icon ${activeClass}" data-movie-id="${movie.id}" aria-label="Add to Watchlist">
+                                <svg viewBox="0 0 24 24"><path d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"></path></svg>
+                            </div>
                         </div>
                     `;
                 }).join('');
@@ -107,34 +113,46 @@ class HomeView {
 window.HomeView = HomeView;
 
 /**
+ * Handles clicks on the watchlist (favorite) icons using event delegation.
+ * @param {Event} event - The click event.
+ */
+function handleWatchlistClick(event) {
+    const icon = event.target.closest('.favorite-icon');
+    if (!icon) return;
+
+    const movieId = parseInt(icon.dataset.movieId, 10);
+    if (!movieId) return;
+
+    if (isMovieInWatchlist(movieId)) {
+        removeFromWatchlist(movieId);
+        icon.classList.remove('active');
+    } else {
+        addToWatchlist(movieId);
+        icon.classList.add('active');
+    }
+}
+
+/**
  * Implements lazy loading for images using the Intersection Observer API.
- * It targets all images with the class 'lazy' and replaces their
- * data-src with src when they enter the viewport.
  */
 function lazyLoadImages() {
     const lazyImages = document.querySelectorAll('img.lazy');
-
     if ('IntersectionObserver' in window) {
         const observer = new IntersectionObserver((entries, observer) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     const img = entry.target;
-                    img.src = img.dataset.src; // Load the image
-                    
-                    // Once the image is loaded, add the 'loaded' class for the fade-in effect
+                    img.src = img.dataset.src;
                     img.onload = () => {
                         img.classList.remove('lazy');
                         img.classList.add('loaded');
                     };
-                    
-                    observer.unobserve(img); // Clean up and stop observing the loaded image
+                    observer.unobserve(img);
                 }
             });
         });
-
         lazyImages.forEach(img => observer.observe(img));
     } else {
-        // Fallback for browsers that do not support Intersection Observer
         lazyImages.forEach(img => {
             img.src = img.dataset.src;
             img.classList.remove('lazy');
@@ -142,7 +160,6 @@ function lazyLoadImages() {
         });
     }
 }
-
 
 /**
  * Registers the service worker for PWA functionality.
@@ -163,6 +180,9 @@ function registerServiceWorker() {
 function initialize() {
     registerServiceWorker();
     
+    // Add a single, delegated event listener for all watchlist clicks
+    document.getElementById('app-root').addEventListener('click', handleWatchlistClick);
+
     window.addEventListener('hashchange', () => router.navigate());
     window.addEventListener('load', () => router.navigate());
 
