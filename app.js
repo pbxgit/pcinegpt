@@ -1,8 +1,9 @@
 /*
 ================================================================
-APP.JS - AWWWARDS REBUILD 2025 (Final Corrected Version)
-- Core application logic for the new conversational experience.
+APP.JS - AWWWARDS REBUILD 2025 (ENHANCED & POLISHED)
+- Core application logic with a focus on fluid UX and performance.
 - Manages theme, state, routing, and dynamic view rendering.
+- Features graceful view transitions, optimized loading, and accessibility improvements.
 ================================================================
 */
 
@@ -51,15 +52,13 @@ function applyTheme(theme) {
 }
 
 function toggleTheme() {
-    const newTheme = state.currentTheme === 'light' ? 'dark' : 'light';
-    applyTheme(newTheme);
+    applyTheme(state.currentTheme === 'light' ? 'dark' : 'light');
 }
 
 function initTheme() {
     const savedTheme = storage.getTheme();
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
-    applyTheme(theme);
+    applyTheme(savedTheme || (systemPrefersDark ? 'dark' : 'light'));
 }
 
 // ================================================================
@@ -80,8 +79,14 @@ async function router() {
     state.currentRoute = path || '/';
 
     if (!dom.root) return;
-    dom.root.innerHTML = '';
+
+    // Fade out the current view for a smooth transition
+    dom.root.classList.add('view-transition-out');
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    dom.root.innerHTML = ''; // Clear previous content
     showLoading();
+    dom.root.classList.remove('view-transition-out');
 
     const routeHandlerName = routes[path] || routes['/'];
     const handler = viewHandlers[routeHandlerName];
@@ -89,9 +94,14 @@ async function router() {
     try {
         const type = path.includes('/tv/') ? 'tv' : 'movie';
         await handler({ param, type });
+        // Set focus on the new view's main heading for accessibility
+        const mainHeading = dom.root.querySelector('h1');
+        if (mainHeading) mainHeading.setAttribute('tabindex', '-1');
+        if (mainHeading) mainHeading.focus();
+
     } catch (error) {
         console.error(`Failed to render view: ${routeHandlerName}`, error);
-        renderError('Could not load content. Please try again later.');
+        renderError('Could not load content. Please check your connection and try again.');
     }
 }
 
@@ -109,16 +119,14 @@ const viewHandlers = {
     },
     async renderSearchView({ param: query }) {
         const decodedQuery = decodeURIComponent(query);
-        render(`<div class="view search-view"><h1 class="search-title">Results for "${decodedQuery}"</h1></div>`, { instant: true });
+        render(`<div class="view search-view"><h1 class="search-title">Results for "${decodedQuery}"</h1><div class="search-results-container"></div></div>`, { instant: true });
         const recommendationsText = await gemini.getAIRecommendations({ searchQuery: decodedQuery });
         const results = await parseAndFetchGeminiResults(recommendationsText);
-        const searchView = document.querySelector('.search-view');
-        if (searchView && results.length > 0) {
-            searchView.insertAdjacentHTML('beforeend', createCarousel('AI Recommendations', results));
-        } else if (searchView) {
-            renderError('The AI could not find any results.', searchView);
-            const title = searchView.querySelector('.search-title');
-            if (title) title.style.display = 'none';
+        const resultsContainer = document.querySelector('.search-results-container');
+        if (resultsContainer && results.length > 0) {
+            resultsContainer.innerHTML = createCarousel('AI Recommendations', results);
+        } else if (resultsContainer) {
+            renderError('The AI could not find any recommendations for that query.', resultsContainer);
         }
     },
     async renderStatsView() {
@@ -142,7 +150,8 @@ function render(html, options = {}) {
 
 function renderError(message, target = dom.root) {
     if (target) {
-        target.innerHTML = `<div class="error-view" style="text-align: center; padding: 2rem;"><p>${message}</p></div>`;
+        target.innerHTML = `<div class="error-view" style="text-align: center; padding: 2rem; color: var(--color-text-secondary);"><i data-lucide="alert-circle" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i><p>${message}</p></div>`;
+        if (window.lucide) lucide.createIcons();
     }
 }
 
@@ -152,27 +161,37 @@ function renderError(message, target = dom.root) {
 
 async function loadDiscoveryCarousels() {
     if (state.currentRoute !== '/') return;
-    const carouselContainer = document.querySelector('.carousel-master-container');
-    if (!carouselContainer) return;
-    const carouselsToLoad = [{ title: "Trending Movies", fetcher: () => api.getTrending('movie'), type: 'movie' }, { title: "Trending TV Shows", fetcher: () => api.getTrending('tv'), type: 'tv' }, { title: "Top Rated Movies", fetcher: () => api.getTopRated('movie'), type: 'movie' }, { title: "Top Rated TV Shows", fetcher: () => api.getTopRated('tv'), type: 'tv' },];
-    if (state.isTraktAuthenticated) carouselsToLoad.push({ title: "Based on Your Top Ratings", fetcher: getTraktPersonalizedRecs });
-    for (let i = 0; i < carouselsToLoad.length; i++) {
-        if (state.currentRoute !== '/') return;
-        try {
-            const { title, fetcher, type } = carouselsToLoad[i];
-            const data = await fetcher();
-            if (data && data.length > 0 && state.currentRoute === '/') {
-                const carouselEl = document.createElement('div');
-                carouselEl.className = 'carousel-container';
-                carouselEl.style.animationDelay = `${i * 150}ms`;
-                carouselEl.innerHTML = createCarousel(title, data, type);
-                if (document.querySelector('.carousel-master-container')) {
-                    document.querySelector('.carousel-master-container').appendChild(carouselEl);
-                }
-            }
-        } catch (error) { console.error(`Failed to load carousel "${carouselsToLoad[i].title}":`, error); }
+    const masterContainer = document.querySelector('.carousel-master-container');
+    if (!masterContainer) return;
+
+    const carouselsToLoad = [
+        { title: "Trending Movies", fetcher: () => api.getTrending('movie'), type: 'movie' },
+        { title: "Trending TV Shows", fetcher: () => api.getTrending('tv'), type: 'tv' },
+        { title: "Top Rated Movies", fetcher: () => api.getTopRated('movie'), type: 'movie' },
+        { title: "Top Rated TV Shows", fetcher: () => api.getTopRated('tv'), type: 'tv' },
+    ];
+
+    if (state.isTraktAuthenticated) {
+        carouselsToLoad.push({ title: "Based on Your Top Ratings", fetcher: getTraktPersonalizedRecs });
     }
+
+    const promises = carouselsToLoad.map(config => config.fetcher().then(data => ({ ...config, data })));
+    const results = await Promise.allSettled(promises);
+
+    results.forEach((result, i) => {
+        if (result.status === 'fulfilled' && result.value.data?.length > 0 && state.currentRoute === '/') {
+            const { title, data, type } = result.value;
+            const carouselEl = document.createElement('div');
+            carouselEl.className = 'carousel-container';
+            carouselEl.style.animationDelay = `${i * 150}ms`;
+            carouselEl.innerHTML = createCarousel(title, data, type);
+            masterContainer.appendChild(carouselEl);
+        } else if (result.status === 'rejected') {
+            console.error(`Failed to load carousel "${carouselsToLoad[i].title}":`, result.reason);
+        }
+    });
 }
+
 
 async function getTraktPersonalizedRecs() {
     const ratings = await trakt.getTraktRatings();
@@ -194,7 +213,7 @@ async function parseAndFetchGeminiResults(geminiResponse) {
     return (await Promise.all(promises)).filter(Boolean);
 }
 
-function createAIPrompt() { return `<div class="view home-view"><div class="ai-prompt-container"><h1>Your Conversational Movie Navigator</h1><p>Tell me what you're in the mood for. A genre, an actor, a vibe – anything.</p><div class="search-input-wrapper"><input type="text" class="search-input" id="main-search-input" placeholder="e.g., &quot;space operas like Dune&quot;"></div><div class="suggestion-chips"><button class="chip" data-query="mind-bending sci-fi movies">Sci-Fi</button><button class="chip" data-query="cozy mystery shows">Mysteries</button><button class="chip" data-query="oscar winning dramas from the 90s">Dramas</button></div></div><div class="carousel-master-container"></div></div>`; }
+function createAIPrompt() { return `<style>.view{animation:none;}</style><div class="view home-view"><div class="ai-prompt-container"><h1>Your Conversational Movie Navigator</h1><p>Tell me what you're in the mood for. A genre, an actor, a vibe – anything.</p><div class="search-input-wrapper"><input type="text" class="search-input" id="main-search-input" placeholder="e.g., &quot;space operas like Dune&quot;" aria-label="Search for movies and shows"></div><div class="suggestion-chips"><button class="chip" data-query="mind-bending sci-fi movies">Sci-Fi</button><button class="chip" data-query="cozy mystery shows">Mysteries</button><button class="chip" data-query="oscar winning dramas from the 90s">Dramas</button></div></div><div class="carousel-master-container"></div></div>`; }
 function createCarousel(title, items, type = 'movie') { return `<h2 class="carousel-title">${title}</h2><div class="carousel-content">${items.map(item => createPosterCard(item, type)).join('')}</div>`; }
 function createPosterCard(item, type) { const title = item.title || item.name; const hrefType = item.media_type || type; return `<div class="poster-card"><a href="#/${hrefType}/${item.id}"><img src="${api.getPosterUrl(item.poster_path)}" alt="${title}" loading="lazy"><div class="poster-overlay"><span>${title}</span></div></a></div>`; }
 
@@ -204,36 +223,30 @@ function createPosterCard(item, type) { const title = item.title || item.name; c
 
 function handleSearch(query) { if (query?.trim()) window.location.hash = `#/search/${encodeURIComponent(query.trim())}`; }
 function bindSearchInputEvents() { const searchInput = document.getElementById('main-search-input'); if (searchInput) searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleSearch(e.target.value); }); document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => handleSearch(chip.dataset.query))); }
-async function handleWatchlistClick(e) { const button = e.target.closest('.watchlist-button'); if (!button) return; if (!state.isTraktAuthenticated) { trakt.redirectToTraktAuth(); return; } const view = e.target.closest('.detail-view'); const { mediaId, mediaType, mediaTitle, mediaYear } = view.dataset; const mediaItem = { id: parseInt(mediaId), type: mediaType, title: mediaTitle, year: parseInt(mediaYear) }; const isInWatchlist = state.traktWatchlist.some(item => (item.movie?.ids?.tmdb || item.show?.ids?.tmdb) === mediaItem.id); button.disabled = true; button.innerHTML = 'Updating...'; try { isInWatchlist ? await trakt.removeFromWatchlist(mediaItem) : await trakt.addToWatchlist(mediaItem); await fetchTraktWatchlist(); button.innerHTML = !isInWatchlist ? '<i data-lucide="check"></i> In Watchlist' : '<i data-lucide="plus"></i> Add to Watchlist'; if (window.lucide) lucide.createIcons(); } catch (error) { console.error("Failed to update watchlist:", error); button.innerHTML = 'Error'; } finally { button.disabled = false; } }
+async function handleWatchlistClick(e) { const button = e.target.closest('.watchlist-button'); if (!button) return; if (!state.isTraktAuthenticated) { trakt.redirectToTraktAuth(); return; } const view = e.target.closest('.detail-view'); const { mediaId, mediaType, mediaTitle, mediaYear } = view.dataset; const mediaItem = { id: parseInt(mediaId), type: mediaType, title: mediaTitle, year: parseInt(mediaYear) }; const isInWatchlist = state.traktWatchlist.some(item => (item.movie?.ids?.tmdb || item.show?.ids?.tmdb) === mediaItem.id); button.disabled = true; button.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;margin:auto;"></div>'; try { isInWatchlist ? await trakt.removeFromWatchlist(mediaItem) : await trakt.addToWatchlist(mediaItem); await fetchTraktWatchlist(); button.innerHTML = !isInWatchlist ? '<i data-lucide="check"></i> In Watchlist' : '<i data-lucide="plus"></i> Add to Watchlist'; if (window.lucide) lucide.createIcons(); } catch (error) { console.error("Failed to update watchlist:", error); button.innerHTML = 'Error'; } finally { button.disabled = false; } }
 function showLoading() { if (dom.root) dom.root.innerHTML = `<div class="loading-container"><div class="spinner"></div></div>`; }
-function updateAuthUI() { state.isTraktAuthenticated = !!storage.getTraktTokens(); dom.trakt.authBtn.textContent = state.isTraktAuthenticated ? 'Logout' : 'Connect Trakt'; dom.trakt.statsLink.style.display = state.isTraktAuthenticated ? 'inline-block' : 'none'; }
+function updateAuthUI() { state.isTraktAuthenticated = !!storage.getTraktTokens(); dom.trakt.authBtn.textContent = state.isTraktAuthenticated ? 'Logout Trakt' : 'Connect Trakt'; dom.trakt.statsLink.style.display = state.isTraktAuthenticated ? 'inline-block' : 'none'; }
 async function handleAuthCallback() { const urlParams = new URLSearchParams(window.location.search); const authCode = urlParams.get('code'); if (authCode) { window.history.replaceState({}, document.title, window.location.pathname); showLoading(); await trakt.handleTraktCallback(authCode); } }
 async function fetchTraktWatchlist() { if (storage.getTraktTokens()) { try { state.traktWatchlist = await trakt.getWatchlist(); } catch (error) { console.error("Could not fetch Trakt watchlist:", error); state.traktWatchlist = []; } } }
 function initEventListeners() { window.addEventListener('hashchange', router); dom.themeToggleBtn.addEventListener('click', toggleTheme); dom.trakt.authBtn.addEventListener('click', () => { state.isTraktAuthenticated ? trakt.logoutTrakt() : trakt.redirectToTraktAuth(); }); dom.root.addEventListener('click', handleWatchlistClick); }
 
-// DEFINITIVE BUG FIX: New, robust, and linear initialization sequence.
 async function init() {
     console.log("Application initializing...");
     try {
-        // 1. Set up all synchronous parts of the UI first.
+        // 1. Set up all synchronous UI event listeners and initial theme.
         initEventListeners();
         initTheme();
-        if (window.lucide) {
-            lucide.createIcons();
-        } else {
-             // Fallback if the icon library is slow to load
-            document.addEventListener('lucide-loaded', () => lucide.createIcons());
-        }
+        if (window.lucide) lucide.createIcons();
 
-        // 2. Handle any authentication callbacks from Trakt, which updates localStorage.
+        // 2. Handle potential Trakt authentication callback from URL.
         await handleAuthCallback();
         
-        // 3. Update the UI and fetch data based on the now-settled authentication state.
+        // 3. Update UI based on authentication state and fetch user data.
         updateAuthUI();
         await fetchTraktWatchlist();
         
-        // 4. Finally, and only once, run the router to render the correct view.
-        console.log("Initialization complete. Running router.");
+        // 4. Run the router for the first time to render the initial view.
+        console.log("Initialization complete. Routing to initial view.");
         router();
 
     } catch (error) {
@@ -242,5 +255,5 @@ async function init() {
     }
 }
 
-// Ensure the init function runs only when the DOM is fully loaded.
+// Start the application once the DOM is fully loaded.
 document.addEventListener('DOMContentLoaded', init);
