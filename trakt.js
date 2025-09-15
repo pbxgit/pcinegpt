@@ -1,6 +1,6 @@
 /*
 ================================================================
-TRAKT.JS - AWWWARDS REBUILD 2025 (Corrected & Expanded)
+TRAKT.JS - AWWWARDS REBUILD 2025 (Corrected Version)
 - Manages the secure OAuth 2.0 PKCE authentication flow for Trakt.tv.
 - Handles all authenticated API requests for user data.
 - Implements token management and automatic logout on authorization failure.
@@ -14,9 +14,12 @@ const CLIENT_ID = '4817758e941a6135b5efc85f8ec52d5ebd72b677fab299fb94f2bb5d1bcb8
 const REDIRECT_URI = window.location.origin + window.location.pathname;
 const TRAKT_API_URL = 'https://api.trakt.tv';
 
-// --- PKCE Helper Functions ---
-function generateCodeVerifier(length) { /* ... (unchanged) ... */ }
-async function generateCodeChallenge(verifier) { /* ... (unchanged) ... */ }
+// ... (PKCE and Auth Flow functions are unchanged) ...
+function generateCodeVerifier(length) { /* ... */ }
+async function generateCodeChallenge(verifier) { /* ... */ }
+export async function redirectToTraktAuth() { /* ... */ }
+export async function handleTraktCallback(authCode) { /* ... */ }
+export function logoutTrakt() { /* ... */ }
 function generateCodeVerifier(length) {
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
     let text = '';
@@ -32,12 +35,6 @@ async function generateCodeChallenge(verifier) {
     return btoa(String.fromCharCode(...new Uint8Array(digest)))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-
-
-// --- Core Authentication Flow ---
-export async function redirectToTraktAuth() { /* ... (unchanged) ... */ }
-export async function handleTraktCallback(authCode) { /* ... (unchanged) ... */ }
-export function logoutTrakt() { /* ... (unchanged) ... */ }
 export async function redirectToTraktAuth() {
     const verifier = generateCodeVerifier(128);
     sessionStorage.setItem('trakt_code_verifier', verifier);
@@ -75,11 +72,9 @@ export function logoutTrakt() {
     location.reload();
 }
 
-// --- Authenticated API Fetching ---
 async function fetchFromTrakt(endpoint, options = {}) {
     const tokens = getTraktTokens();
     if (!tokens) throw new Error('User is not authenticated with Trakt.');
-
     const url = `${TRAKT_API_URL}${endpoint}`;
     const headers = {
         'Content-Type': 'application/json',
@@ -87,18 +82,9 @@ async function fetchFromTrakt(endpoint, options = {}) {
         'trakt-api-key': CLIENT_ID,
         'Authorization': `Bearer ${tokens.access_token}`
     };
-
-    const config = {
-        headers,
-        ...options
-    };
-
+    const config = { headers, ...options };
     const response = await fetch(url, config);
-
-    if (response.status === 204) { // Handle "No Content" responses for actions like remove
-        return { success: true };
-    }
-    
+    if (response.status === 204) return { success: true };
     if (!response.ok) {
         if (response.status === 401) logoutTrakt();
         throw new Error(`Trakt API error! Status: ${response.status}`);
@@ -108,54 +94,38 @@ async function fetchFromTrakt(endpoint, options = {}) {
 
 // --- Exported Data-Fetching Functions ---
 export function getUserStats() { return fetchFromTrakt('/users/me/stats'); }
-export async function getTraktRatings() { /* ... (unchanged) ... */ return []; }
-
-// --- NEW: WATCHLIST MANAGEMENT FUNCTIONS ---
 
 /**
- * Gets the user's entire watchlist (movies and shows).
- * @returns {Promise<Array<object>>} A promise that resolves to the user's watchlist items.
+ * (BUG FIX) Fetches the user's highly-rated (9 and 10) movies and shows.
+ * This was previously returning an empty array. It is now fully functional.
+ * @returns {Promise<Array<object>>} A combined array of highly-rated items.
  */
+export async function getTraktRatings() {
+    const [movies10, shows10, movies9, shows9] = await Promise.all([
+        fetchFromTrakt('/users/me/ratings/movies/10?limit=10'),
+        fetchFromTrakt('/users/me/ratings/shows/10?limit=10'),
+        fetchFromTrakt('/users/me/ratings/movies/9?limit=10'),
+        fetchFromTrakt('/users/me/ratings/shows/9?limit=10')
+    ]);
+    return [...movies10, ...shows10, ...movies9, ...shows9];
+}
+
+
+// --- Watchlist Management Functions ---
 export async function getWatchlist() {
     const movies = await fetchFromTrakt('/users/me/watchlist/movies');
     const shows = await fetchFromTrakt('/users/me/watchlist/shows');
     return [...movies, ...shows];
 }
-
-/**
- * Adds one or more items to the Trakt watchlist.
- * @param {object} media - The movie or show object to add.
- * @param {string} type - The type of media ('movie' or 'tv').
- */
 export function addToWatchlist({ id, title, year, type }) {
     const payload = {
-        [type === 'tv' ? 'shows' : 'movies']: [{
-            title,
-            year,
-            ids: { tmdb: id }
-        }]
+        [type === 'tv' ? 'shows' : 'movies']: [{ title, year, ids: { tmdb: id } }]
     };
-    return fetchFromTrakt('/sync/watchlist', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-    });
+    return fetchFromTrakt('/sync/watchlist', { method: 'POST', body: JSON.stringify(payload) });
 }
-
-/**
- * Removes an item from the Trakt watchlist.
- * @param {object} media - The movie or show object to remove.
- * @param {string} type - The type of media ('movie' or 'tv').
- */
 export function removeFromWatchlist({ id, title, year, type }) {
     const payload = {
-        [type === 'tv' ? 'shows' : 'movies']: [{
-            title,
-            year,
-            ids: { tmdb: id }
-        }]
+        [type === 'tv' ? 'shows' : 'movies']: [{ title, year, ids: { tmdb: id } }]
     };
-    return fetchFromTrakt('/sync/watchlist/remove', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-    });
+    return fetchFromTrakt('/sync/watchlist/remove', { method: 'POST', body: JSON.stringify(payload) });
 }
