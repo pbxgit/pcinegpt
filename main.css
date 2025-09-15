@@ -1,9 +1,6 @@
 /*
 ================================================================
 CORE & THEME SETUP
-- Establishes the foundational dark theme, typography, and layout.
-- Uses modern CSS custom properties for easy management of the
-  color palette and design tokens.
 ================================================================
 */
 :root {
@@ -17,395 +14,195 @@ CORE & THEME SETUP
     --color-on-surface: #E0E0E0;
     --color-on-primary: #000000;
     --color-subtle-text: #A0A0A0;
-    --color-favorite: #E91E63; /* Heart color */
+    --color-favorite: #E91E63;
 
-    /* Typography */
+    /* Dynamic Theme Colors - will be overridden by JS */
+    --theme-color-primary: var(--color-primary);
+    --theme-color-text: var(--color-on-background);
+
+    /* Typography, Layout, Transitions... */
     --font-family-main: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-size-base: 16px;
-    --font-size-lg: 1.125rem; /* 18px */
-    --font-size-xl: 1.5rem;   /* 24px */
-    --font-size-xxl: 2.5rem;  /* 40px */
-
-    /* Layout & Spacing */
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.5rem;
+    --font-size-xxl: 2.5rem;
     --spacing-unit: 8px;
     --container-width: 1200px;
     --header-height: 70px;
     --border-radius: 8px;
-
-    /* Transitions & Animations */
     --transition-speed-fast: 0.2s;
     --transition-speed-normal: 0.4s;
     --timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ... (Global Resets & Base Styles are unchanged) ... */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;scroll-behavior:smooth}
+body{background-color:var(--color-background);color:var(--color-on-background);font-family:var(--font-family-main);font-size:var(--font-size-base);line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+h1,h2,h3,h4,h5,h6{font-weight:600;line-height:1.2}
+a{color:var(--color-primary);text-decoration:none;transition:color var(--transition-speed-fast) ease}
+a:hover{color:var(--color-secondary)}
+img{max-width:100%;height:auto;display:block}
+
+/* ... (Header & Navigation are unchanged) ... */
+.app-header{background-color:rgba(18,18,18,0.8);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,0.1);height:var(--header-height);position:fixed;top:0;left:0;width:100%;z-index:1000;display:flex;align-items:center;justify-content:center;padding:0 calc(var(--spacing-unit)*3)}
+.header-content{width:100%;max-width:var(--container-width);display:flex;justify-content:space-between;align-items:center}
+.logo{font-size:var(--font-size-lg);font-weight:700;color:var(--color-on-background);letter-spacing:-0.5px}
+.header-actions{display:flex;align-items:center;gap:calc(var(--spacing-unit)*2)}
+.search-bar{background-color:var(--color-surface);border:1px solid transparent;border-radius:var(--border-radius);color:var(--color-on-surface);font-family:var(--font-family-main);font-size:0.9rem;padding:calc(var(--spacing-unit)*1.2) calc(var(--spacing-unit)*2);width:280px;transition:all var(--transition-speed-fast) ease;outline:none}
+.search-bar:focus{border-color:var(--color-primary);box-shadow:0 0 0 3px rgba(187,134,252,0.3)}
+
+/* ... (Buttons are unchanged) ... */
+.trakt-button{background-color:var(--color-primary);color:var(--color-on-primary);border:none;border-radius:var(--border-radius);padding:calc(var(--spacing-unit)*1.2) calc(var(--spacing-unit)*3);font-family:var(--font-family-main);font-weight:600;font-size:0.9rem;cursor:pointer;transition:all var(--transition-speed-fast) var(--timing-function);transform:scale(1)}
+.trakt-button:hover{background-color:var(--color-secondary);box-shadow:0 4px 15px rgba(3,218,198,0.2);transform:scale(1.05) translateY(-2px)}
+.trakt-button:active{transform:scale(0.98) translateY(0)}
+
+/* ... (Main Content, Hero, Carousel, Posters, Watchlist Icon, Search View are unchanged) ... */
+.app-main{padding-top:var(--header-height);min-height:100vh;width:100%;max-width:var(--container-width);margin:0 auto;padding-left:calc(var(--spacing-unit)*3);padding-right:calc(var(--spacing-unit)*3);padding-bottom:calc(var(--spacing-unit)*10)}
+.hero-section{text-align:center;padding:calc(var(--spacing-unit)*8) 0;margin-bottom:calc(var(--spacing-unit)*4)}
+.hero-section h1{font-size:var(--font-size-xxl);font-weight:700}
+.tagline{font-size:var(--font-size-lg);color:var(--color-subtle-text);margin-top:var(--spacing-unit)}
+.carousel{margin-bottom:calc(var(--spacing-unit)*6)}
+.carousel h2{font-size:var(--font-size-xl);margin-bottom:calc(var(--spacing-unit)*2);font-weight:700}
+.carousel-content{display:flex;overflow-x:auto;overflow-y:hidden;gap:calc(var(--spacing-unit)*2.5);padding:calc(var(--spacing-unit)*1) 0 calc(var(--spacing-unit)*3);scrollbar-width:thin;scrollbar-color:var(--color-primary) transparent}
+.carousel-content::-webkit-scrollbar{height:8px}
+.carousel-content::-webkit-scrollbar-track{background:transparent}
+.carousel-content::-webkit-scrollbar-thumb{background-color:var(--color-surface);border-radius:10px}
+.carousel-content:hover::-webkit-scrollbar-thumb{background-color:var(--color-primary)}
+.poster-card{position:relative;flex:0 0 auto;width:185px;border-radius:var(--border-radius);overflow:hidden;transition:transform var(--transition-speed-fast) var(--timing-function),box-shadow var(--transition-speed-fast) var(--timing-function);cursor:pointer;background-color:var(--color-surface)}
+.poster-card a { display: block; } /* Make the link fill the card */
+.poster-card:hover{transform:scale(1.05);box-shadow:0 8px 25px rgba(0,0,0,0.5)}
+.poster-card img{width:100%;height:100%;object-fit:cover}
+.favorite-icon{position:absolute;top:10px;right:10px;width:32px;height:32px;background-color:rgba(18,18,18,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transform:scale(0.9);opacity:0.7;transition:all var(--transition-speed-fast) var(--timing-function);z-index: 2;}
+.poster-card:hover .favorite-icon{transform:scale(1);opacity:1}
+.favorite-icon svg{width:18px;height:18px;fill:var(--color-on-background);transition:all var(--transition-speed-fast) ease}
+.favorite-icon:hover svg{fill:var(--color-favorite)}
+.favorite-icon.active svg{fill:var(--color-favorite);animation:bounceIn 0.3s var(--timing-function)}
+@keyframes bounceIn{0%{transform:scale(0.8)}70%{transform:scale(1.2)}100%{transform:scale(1)}}
+.search-view h1{font-size:var(--font-size-xxl);margin-bottom:var(--spacing-unit)}
+.search-view .query-display{color:var(--color-primary)}
+.search-results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:calc(var(--spacing-unit)*2.5);margin-top:calc(var(--spacing-unit)*4)}
+.loading-container{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(var(--spacing-unit)*10) 0;gap:calc(var(--spacing-unit)*2);color:var(--color-subtle-text)}
+.spinner{width:50px;height:50px;border:5px solid var(--color-surface);border-top-color:var(--color-primary);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 /*
 ================================================================
-GLOBAL RESETS & BASE STYLES
-- A modern reset to ensure consistency across browsers.
-- Sets up the core body styles and default typography.
+DETAIL VIEW
+- Styles for the immersive detail page.
 ================================================================
 */
-*,
-*::before,
-*::after {
-    box-sizing: border-box;
-    margin: 0;
+.detail-view {
+    position: relative;
     padding: 0;
-}
-
-html, body {
-    height: 100%;
-    scroll-behavior: smooth;
-}
-
-body {
-    background-color: var(--color-background);
-    color: var(--color-on-background);
-    font-family: var(--font-family-main);
-    font-size: var(--font-size-base);
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
-
-h1, h2, h3, h4, h5, h6 {
-    font-weight: 600;
-    line-height: 1.2;
-}
-
-a {
-    color: var(--color-primary);
-    text-decoration: none;
-    transition: color var(--transition-speed-fast) ease;
-}
-
-a:hover {
-    color: var(--color-secondary);
-}
-
-img {
+    margin: 0;
     max-width: 100%;
-    height: auto;
-    display: block;
 }
 
-/*
-================================================================
-HEADER & NAVIGATION
-- Styles for the fixed application header, logo, and actions.
-================================================================
-*/
-.app-header {
-    background-color: rgba(18, 18, 18, 0.8);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    height: var(--header-height);
+.backdrop {
+    height: 60vh;
     position: fixed;
     top: 0;
     left: 0;
+    right: 0;
+    background-size: cover;
+    background-position: center 20%;
+    z-index: -1;
+}
+
+.backdrop::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 calc(var(--spacing-unit) * 3);
+    height: 100%;
+    background: linear-gradient(to top, var(--color-background) 5%, rgba(18, 18, 18, 0.5) 70%, rgba(18, 18, 18, 0.8) 100%);
 }
 
-.header-content {
-    width: 100%;
-    max-width: var(--container-width);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.logo {
-    font-size: var(--font-size-lg);
-    font-weight: 700;
-    color: var(--color-on-background);
-    letter-spacing: -0.5px;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: calc(var(--spacing-unit) * 2);
-}
-
-.search-bar {
-    background-color: var(--color-surface);
-    border: 1px solid transparent;
-    border-radius: var(--border-radius);
-    color: var(--color-on-surface);
-    font-family: var(--font-family-main);
-    font-size: 0.9rem;
-    padding: calc(var(--spacing-unit) * 1.2) calc(var(--spacing-unit) * 2);
-    width: 280px;
-    transition: all var(--transition-speed-fast) ease;
-    outline: none;
-}
-
-.search-bar:focus {
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(187, 134, 252, 0.3);
-}
-
-/*
-================================================================
-BUTTONS & MICRO-INTERACTIONS
-- Core styles for interactive elements, focusing on tactile
-  feedback through transitions.
-================================================================
-*/
-.trakt-button {
-    background-color: var(--color-primary);
-    color: var(--color-on-primary);
-    border: none;
-    border-radius: var(--border-radius);
-    padding: calc(var(--spacing-unit) * 1.2) calc(var(--spacing-unit) * 3);
-    font-family: var(--font-family-main);
-    font-weight: 600;
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all var(--transition-speed-fast) var(--timing-function);
-    transform: scale(1);
-}
-
-.trakt-button:hover {
-    background-color: var(--color-secondary);
-    box-shadow: 0 4px 15px rgba(3, 218, 198, 0.2);
-    transform: scale(1.05) translateY(-2px);
-}
-
-.trakt-button:active {
-    transform: scale(0.98) translateY(0);
-}
-
-/*
-================================================================
-MAIN CONTENT & LAYOUT
-- Defines the main layout container and hero section.
-================================================================
-*/
-.app-main {
-    padding-top: var(--header-height);
-    min-height: 100vh;
-    width: 100%;
-    max-width: var(--container-width);
-    margin: 0 auto;
+.detail-content {
+    padding-top: 45vh; /* Space for the backdrop */
     padding-left: calc(var(--spacing-unit) * 3);
     padding-right: calc(var(--spacing-unit) * 3);
-    padding-bottom: calc(var(--spacing-unit) * 10); /* Footer space */
+    max-width: var(--container-width);
+    margin: 0 auto;
+    background-color: var(--color-background); /* Solid background for content area */
 }
 
-.hero-section {
-    text-align: center;
-    padding: calc(var(--spacing-unit) * 8) 0;
-    margin-bottom: calc(var(--spacing-unit) * 4);
+.detail-header {
+    display: flex;
+    gap: calc(var(--spacing-unit) * 5);
+    align-items: flex-end;
 }
 
-.hero-section h1 {
-    font-size: var(--font-size-xxl);
+.detail-poster img {
+    width: 220px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    transform: translateY(-50px);
+}
+
+.detail-title h1 {
+    font-size: 3rem;
     font-weight: 700;
 }
 
-.tagline {
+.detail-title p {
     font-size: var(--font-size-lg);
     color: var(--color-subtle-text);
     margin-top: var(--spacing-unit);
 }
 
-/*
-================================================================
-CAROUSEL & POSTERS
-- Styles for the horizontal scrolling content carousels.
-- Defines the look of the movie poster cards.
-================================================================
-*/
-.carousel {
-    margin-bottom: calc(var(--spacing-unit) * 6);
-}
-
-.carousel h2 {
-    font-size: var(--font-size-xl);
-    margin-bottom: calc(var(--spacing-unit) * 2);
-    font-weight: 700;
-}
-
-.carousel-content {
+.detail-meta {
     display: flex;
-    overflow-x: auto;
-    overflow-y: hidden;
-    gap: calc(var(--spacing-unit) * 2.5);
-    padding: calc(var(--spacing-unit) * 1) 0 calc(var(--spacing-unit) * 3);
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-primary) transparent;
+    gap: calc(var(--spacing-unit) * 3);
+    margin-top: calc(var(--spacing-unit) * 2);
 }
 
-.carousel-content::-webkit-scrollbar { height: 8px; }
-.carousel-content::-webkit-scrollbar-track { background: transparent; }
-.carousel-content::-webkit-scrollbar-thumb { background-color: var(--color-surface); border-radius: 10px; }
-.carousel-content:hover::-webkit-scrollbar-thumb { background-color: var(--color-primary); }
+.detail-meta span {
+    font-weight: 500;
+}
 
-.poster-card {
-    position: relative;
-    flex: 0 0 auto;
-    width: 185px;
+.detail-actions {
+    margin-top: calc(var(--spacing-unit) * 3);
+}
+
+.detail-actions .watchlist-btn {
+    background-color: var(--theme-color-primary);
+    color: var(--theme-color-text);
+    padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 4);
+    border: none;
     border-radius: var(--border-radius);
-    overflow: hidden;
-    transition: transform var(--transition-speed-fast) var(--timing-function),
-                box-shadow var(--transition-speed-fast) var(--timing-function);
+    font-size: 1rem;
+    font-weight: 600;
     cursor: pointer;
-    background-color: var(--color-surface);
-}
-
-.poster-card:hover {
-    transform: scale(1.05);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
-}
-
-.poster-card img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-/*
-================================================================
-LOCAL WATCHLIST (FAVORITE ICON)
-- Styles for the heart icon on poster cards.
-================================================================
-*/
-.favorite-icon {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 32px;
-    height: 32px;
-    background-color: rgba(18, 18, 18, 0.7);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transform: scale(0.9);
-    opacity: 0.7;
-    transition: all var(--transition-speed-fast) var(--timing-function);
-}
-
-.poster-card:hover .favorite-icon {
-    transform: scale(1);
-    opacity: 1;
-}
-
-.favorite-icon svg {
-    width: 18px;
-    height: 18px;
-    fill: var(--color-on-background);
     transition: all var(--transition-speed-fast) ease;
 }
 
-.favorite-icon:hover svg {
-    fill: var(--color-favorite);
+.detail-actions .watchlist-btn:hover {
+    transform: scale(1.05);
+    opacity: 0.9;
 }
 
-.favorite-icon.active svg {
-    fill: var(--color-favorite);
-    animation: bounceIn 0.3s var(--timing-function);
+.detail-body {
+    padding: calc(var(--spacing-unit) * 4) 0;
 }
 
-@keyframes bounceIn {
-    0% { transform: scale(0.8); }
-    70% { transform: scale(1.2); }
-    100% { transform: scale(1); }
-}
-
-/*
-================================================================
-SEARCH VIEW
-- Styles for the AI search results page.
-================================================================
-*/
-.search-view h1 {
-    font-size: var(--font-size-xxl);
+.detail-body h2 {
+    font-size: var(--font-size-xl);
+    border-left: 4px solid var(--theme-color-primary);
+    padding-left: var(--spacing-unit);
     margin-bottom: var(--spacing-unit);
 }
 
-.search-view .query-display {
-    color: var(--color-primary);
+.detail-body p {
+    max-width: 80ch;
+    line-height: 1.8;
 }
 
-.search-results-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
-    gap: calc(var(--spacing-unit) * 2.5);
-    margin-top: calc(var(--spacing-unit) * 4);
-}
-
-.loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: calc(var(--spacing-unit) * 10) 0;
-    gap: calc(var(--spacing-unit) * 2);
-    color: var(--color-subtle-text);
-}
-
-.spinner {
-    width: 50px;
-    height: 50px;
-    border: 5px solid var(--color-surface);
-    border-top-color: var(--color-primary);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/*
-================================================================
-PERFORMANCE: LAZY LOADING
-- Visual states for the lazy loading image implementation.
-- Images start transparent and fade in smoothly once loaded.
-================================================================
-*/
-.poster-card img.lazy {
-    opacity: 0;
-    transition: opacity var(--transition-speed-normal) var(--timing-function);
-}
-
-.poster-card img.loaded {
-    opacity: 1;
-}
-
-/*
-================================================================
-FOOTER
-================================================================
-*/
-.app-footer {
-    text-align: center;
-    padding: calc(var(--spacing-unit) * 3);
-    color: var(--color-subtle-text);
-    font-size: 0.85rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    margin-top: calc(var(--spacing-unit) * 4);
-}
-
-/*
-================================================================
-VIEW TRANSITIONS (SPA ROUTER SUPPORT)
-================================================================
-*/
-.view {
-    animation: fadeIn var(--transition-speed-normal) var(--timing-function);
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(15px); }
-    to { opacity: 1; transform: translateY(0); }
-}
+/* ... (Lazy Loading, Footer, View Transitions are unchanged) ... */
+.poster-card img.lazy{opacity:0;transition:opacity var(--transition-speed-normal) var(--timing-function)}
+.poster-card img.loaded{opacity:1}
+.app-footer{text-align:center;padding:calc(var(--spacing-unit)*3);color:var(--color-subtle-text);font-size:0.85rem;border-top:1px solid rgba(255,255,255,0.1);margin-top:calc(var(--spacing-unit)*4)}
+.view{animation:fadeIn var(--transition-speed-normal) var(--timing-function)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
