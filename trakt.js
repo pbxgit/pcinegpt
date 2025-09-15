@@ -1,25 +1,28 @@
 /*
 ================================================================
-TRAKT.JS - THE GRAND REBUILD
-- Vision: A secure and reliable module for all Trakt.tv interactions.
-- Architecture: Manages the complete OAuth 2.0 PKCE authentication
-  flow and provides robust methods for fetching user data.
+TRAKT.JS - TRAKT.TV API & OAUTH 2.0 (PKCE) MODULE
+- Manages the full, secure OAuth 2.0 PKCE authentication flow.
+- Handles making authenticated API requests for user stats,
+  history, and ratings.
+- Implements token management and automatic logout on 401 errors.
 ================================================================
 */
 
 import { saveTraktTokens, getTraktTokens, clearTraktTokens } from './storage.js';
 
-// --- 1. CONFIGURATION ---
+// --- Configuration ---
+// IMPORTANT: This CLIENT_ID is for a specific, registered application.
+// Replace with your own Trakt application's Client ID.
 const CLIENT_ID = '4817758e941a6135b5efc85f8ec52d5ebd72b677fab299fb94f2bb5d1bcb8843';
-const REDIRECT_URI = window.location.origin; // Dynamically use the site's origin
+const REDIRECT_URI = window.location.origin + window.location.pathname; // Dynamic for local/prod
 const TRAKT_API_URL = 'https://api.trakt.tv';
 
-// --- 2. PKCE (PROOF KEY FOR CODE EXCHANGE) HELPERS ---
+// --- PKCE (Proof Key for Code Exchange) Helper Functions ---
 
 /**
- * Generates a cryptographically secure random string.
- * @param {number} length The desired length of the string.
- * @returns {string} The generated verifier.
+ * Generates a cryptographically random string for the code verifier.
+ * @param {number} length - The desired length of the verifier string.
+ * @returns {string} The generated code verifier.
  */
 function generateCodeVerifier(length) {
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
@@ -31,46 +34,54 @@ function generateCodeVerifier(length) {
 }
 
 /**
- * Creates a SHA-256 hash of the verifier for the code challenge.
- * @param {string} verifier The code verifier.
- * @returns {Promise<string>} The URL-safe base64-encoded code challenge.
+ * Creates a SHA-256 hash of the verifier, then Base64URL encodes it.
+ * @param {string} verifier - The code verifier generated earlier.
+ * @returns {Promise<string>} The resulting code challenge.
  */
 async function generateCodeChallenge(verifier) {
-    const data = new TextEncoder().encode(verifier);
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
     const digest = await window.crypto.subtle.digest('SHA-256', data);
+
     return btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 }
 
-// --- 3. CORE AUTHENTICATION FLOW ---
+// --- Core Authentication Flow ---
 
 /**
- * Initiates the authentication process by redirecting the user to Trakt.tv.
+ * Initiates the Trakt authentication process by redirecting the user.
  */
 export async function redirectToTraktAuth() {
+    // 1. Generate and store the verifier for later
     const verifier = generateCodeVerifier(128);
-    sessionStorage.setItem('trakt_code_verifier', verifier); // Use sessionStorage for temporary storage
+    sessionStorage.setItem('trakt_code_verifier', verifier);
+
+    // 2. Create the challenge from the verifier
     const challenge = await generateCodeChallenge(verifier);
 
+    // 3. Construct the authorization URL with PKCE parameters
     const authUrl = new URL(`${TRAKT_API_URL}/oauth/authorize`);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('client_id', CLIENT_ID);
-    authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
-    authUrl.searchParams.set('code_challenge', challenge);
-    authUrl.searchParams.set('code_challenge_method', 'S256');
+    authUrl.searchParams.append('response_type', 'code');
+    authUrl.searchParams.append('client_id', CLIENT_ID);
+    authUrl.searchParams.append('redirect_uri', REDIRECT_URI);
+    authUrl.searchParams.append('code_challenge', challenge);
+    authUrl.searchParams.append('code_challenge_method', 'S256');
 
+    // 4. Redirect the user
     window.location.href = authUrl.toString();
 }
 
 /**
  * Handles the callback from Trakt after user authorization.
- * @param {string} authCode The authorization code from the URL.
+ * Exchanges the authorization code for access and refresh tokens.
+ * @param {string} authCode - The authorization code from the URL.
  */
 export async function handleTraktCallback(authCode) {
     const verifier = sessionStorage.getItem('trakt_code_verifier');
-    if (!verifier) {
-        throw new Error('Trakt auth error: Code verifier not found.');
-    }
+    if (!verifier) throw new Error('Code verifier not found in session storage. Auth flow is invalid.');
 
     const body = JSON.stringify({
         code: authCode,
@@ -88,17 +99,19 @@ export async function handleTraktCallback(authCode) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Trakt token exchange failed: ${errorData.error_description}`);
+            throw new Error('Failed to exchange authorization code for tokens.');
         }
+
         const tokens = await response.json();
         saveTraktTokens(tokens);
+
     } catch (error) {
         console.error('Error during Trakt token exchange:', error);
-        clearTraktTokens(); // Ensure corrupted tokens are cleared on failure
-        throw error;
+        clearTraktTokens(); // Clear any partial/bad data
     } finally {
+        // Clean up session storage and URL regardless of success or failure
         sessionStorage.removeItem('trakt_code_verifier');
+        window.history.replaceState({}, document.title, window.location.pathname);
     }
 }
 
@@ -107,22 +120,22 @@ export async function handleTraktCallback(authCode) {
  */
 export function logoutTrakt() {
     clearTraktTokens();
+    console.log('Logged out from Trakt. Tokens cleared.');
     location.reload();
 }
 
-// --- 4. AUTHENTICATED API REQUESTS ---
+// --- Authenticated API Fetching ---
 
 /**
- * A centralized and robust fetch function for making authenticated Trakt API calls.
- * @param {string} endpoint The API endpoint to request (e.g., '/users/me/stats').
- * @returns {Promise<any>} A promise that resolves to the JSON response.
+ * A centralized fetch function for making authenticated requests to the Trakt API.
+ * @param {string} endpoint - The API endpoint to request (e.g., '/users/me/stats').
+ * @returns {Promise<any>} The JSON response from the Trakt API.
  */
 async function fetchFromTrakt(endpoint) {
     const tokens = getTraktTokens();
-    if (!tokens) {
-        throw new Error('Trakt API Error: User is not authenticated.');
-    }
+    if (!tokens) throw new Error('User is not authenticated with Trakt.');
 
+    const url = `${TRAKT_API_URL}${endpoint}`;
     const headers = {
         'Content-Type': 'application/json',
         'trakt-api-version': '2',
@@ -130,46 +143,52 @@ async function fetchFromTrakt(endpoint) {
         'Authorization': `Bearer ${tokens.access_token}`
     };
 
-    const response = await fetch(`${TRAKT_API_URL}${endpoint}`, { headers });
+    const response = await fetch(url, { headers });
 
-    if (response.status === 401) {
-        // Token is invalid or expired, force logout
-        logoutTrakt();
-        throw new Error('Trakt token unauthorized. Logging out.');
-    }
     if (!response.ok) {
-        throw new Error(`Trakt API request failed: ${response.statusText}`);
+        // If the token is expired or invalid (401), log the user out automatically.
+        if (response.status === 401) {
+            logoutTrakt();
+        }
+        throw new Error(`Trakt API error! Status: ${response.status}`);
     }
-    // Handle 204 No Content responses gracefully
-    return response.status === 204 ? null : response.json();
+    return response.json();
 }
 
 
-// --- 5. EXPORTED DATA FETCHING METHODS ---
+// --- Exported Data-Fetching Functions ---
 
 /**
- * Fetches the user's aggregated statistics.
- * @returns {Promise<object>}
+ * Fetches the user's primary statistics.
+ * @returns {Promise<object>} User stats object.
  */
 export function getUserStats() {
     return fetchFromTrakt('/users/me/stats');
 }
 
 /**
- * Fetches the user's most recent watch history.
- * @param {number} [limit=20] The number of items to fetch.
- * @returns {Promise<Array<object>>}
+ * Fetches the user's recently watched movies and shows.
+ * @returns {Promise<Array<object>>} A combined array of movie and show history items.
  */
-export async function getTraktHistory(limit = 20) {
-    // We can fetch both and combine them later if needed. For now, movies is a good start.
-    return fetchFromTrakt(`/users/me/history/movies?limit=${limit}`);
+export async function getTraktHistory() {
+    // Fetch both movies and shows in parallel for efficiency
+    const [movies, shows] = await Promise.all([
+        fetchFromTrakt('/users/me/history/movies?limit=15'),
+        fetchFromTrakt('/users/me/history/shows?limit=15')
+    ]);
+    return [...movies, ...shows]; // Combine and return
 }
 
 /**
- * Fetches the user's highest-rated items (ratings of 9 and 10).
- * @param {number} [limit=20] The number of items to fetch.
- * @returns {Promise<Array<object>>}
+ * Fetches the user's highly-rated (9 and 10) movies and shows.
+ * @returns {Promise<Array<object>>} A combined array of highly-rated items.
  */
-export async function getTraktRatings(limit = 20) {
-    return fetchFromTrakt(`/users/me/ratings/movies/9,10?limit=${limit}`);
+export async function getTraktRatings() {
+    const [movies10, shows10, movies9, shows9] = await Promise.all([
+        fetchFromTrakt('/users/me/ratings/movies/10?limit=15'),
+        fetchFromTrakt('/users/me/ratings/shows/10?limit=15'),
+        fetchFromTrakt('/users/me/ratings/movies/9?limit=15'),
+        fetchFromTrakt('/users/me/ratings/shows/9?limit=15')
+    ]);
+    return [...movies10, ...shows10, ...movies9, ...shows9];
 }
